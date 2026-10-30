@@ -1,0 +1,4355 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#060a12">
+<title>FIR Panamá 3D · Rutas ATS superiores</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=B612+Mono:wght@400;700&family=B612:wght@400;700&display=swap" rel="stylesheet">
+<!--
+  ════════════════════════════════════════════════════════════════════════════
+  VISOR 3D · FIR PANAMÁ (MPZL) · Rutas ATS superiores, puntos significativos y VOR/DME
+  Fuente: AIP Panamá (AIS – Autoridad Aeronáutica Civil): ENR 3.2, 3.3, 4.1, 4.4, 6.1A.
+  Relieve: teselas públicas Terrarium (AWS Open Data / Tilezen) descargadas por el navegador.
+
+  Organización del archivo
+    1. <style>                    Interfaz (modo oscuro por defecto, adaptable a móvil)
+    2. <script id="datos-aip">    DATOS AIP en JSON  ← editar aquí para actualizar con un nuevo AIRAC
+    3. <script id="geo-ref">      Fronteras/costas de referencia (Natural Earth 1:50 m)
+    4. <script type="module">     GEODESIA · RELIEVE · ESCENA · RUTAS · INTERFAZ
+  Se abre directamente en el navegador (sin servidor). Necesita Internet para Three.js y el relieve.
+  MATERIAL DIDÁCTICO — NO APTO PARA NAVEGACIÓN OPERACIONAL.
+  ════════════════════════════════════════════════════════════════════════════
+-->
+<style>
+:root{
+  --bg:#060a12; --glass:rgba(11,17,27,.86); --solid:#0b111b; --line:rgba(140,170,210,.15); --line2:rgba(140,170,210,.28);
+  --text:#e7eef7; --muted:#8798ae; --faint:#5d6d82; --accent:#5cc6ff; --accent-ink:#03121d; --warn:#ffb547; --ok:#5fd38d;
+  --chip:rgba(120,160,210,.10); --chip2:rgba(120,160,210,.18); --shadow:0 12px 40px rgba(0,0,0,.5);
+  --mono:"B612 Mono",ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  --sans:"B612",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  --top-h:56px; --drawer-w:340px; --inset-left:0px; --inset-bottom:0px;
+}
+:root[data-theme="light"]{
+  --bg:#dce5ee; --glass:rgba(250,252,255,.9); --solid:#f8fbfe; --line:rgba(30,50,80,.13); --line2:rgba(30,50,80,.25);
+  --text:#132030; --muted:#56687d; --faint:#8494a7; --accent:#0a78c2; --accent-ink:#fff; --warn:#b26500; --ok:#1d8a4b;
+  --chip:rgba(20,60,110,.06); --chip2:rgba(20,60,110,.12); --shadow:0 12px 40px rgba(20,40,70,.18);
+}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;overflow:hidden;background:var(--bg);color:var(--text);font:13px/1.45 var(--sans);-webkit-tap-highlight-color:transparent;-webkit-font-smoothing:antialiased}
+#c{position:fixed;inset:0;display:block;touch-action:none;outline:none}
+button,input{font:inherit;color:inherit}
+svg.i{width:18px;height:18px;stroke:currentColor;fill:none;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.glass{background:var(--glass);backdrop-filter:blur(14px) saturate(1.2);-webkit-backdrop-filter:blur(14px) saturate(1.2);border:1px solid var(--line);box-shadow:var(--shadow)}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;background:var(--chip);border:1px solid var(--line);border-radius:9px;padding:7px 11px;cursor:pointer;white-space:nowrap;transition:background .15s,border-color .15s}
+.btn:hover{border-color:var(--line2);background:var(--chip2)}
+.btn.icon{width:36px;height:36px;padding:0}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink);font-weight:700}
+.seg{display:flex;background:var(--chip);border:1px solid var(--line);border-radius:10px;padding:3px;gap:2px}
+.seg button{flex:1;background:none;border:0;border-radius:7px;padding:6px 12px;cursor:pointer;color:var(--muted);white-space:nowrap}
+.seg button:hover{color:var(--text)}
+.seg button.on{background:var(--accent);color:var(--accent-ink);font-weight:700}
+
+/* ── Barra superior ── */
+#top{position:fixed;top:0;left:0;right:0;height:var(--top-h);display:flex;align-items:center;gap:12px;padding:0 12px;padding-top:env(safe-area-inset-top);z-index:30;border-width:0 0 1px;border-radius:0}
+#brand{display:flex;align-items:center;gap:10px;min-width:0}
+#brand .t{font-weight:700;letter-spacing:.02em;font-size:14px;white-space:nowrap}
+#brand .s{color:var(--muted);font-size:11px;white-space:nowrap}
+#modeSeg{margin:0 auto}
+#actions{display:flex;gap:6px}
+#actions .sep{width:1px;background:var(--line);margin:4px 2px}
+
+/* ── Panel lateral con pestañas ── */
+#drawer{position:fixed;top:calc(var(--top-h) + 10px);left:10px;bottom:10px;width:var(--drawer-w);border-radius:14px;display:flex;flex-direction:column;z-index:22;transition:transform .32s cubic-bezier(.2,.8,.2,1)}
+#drawer.closed{transform:translateX(calc(-100% - 20px))}
+.tabs{display:flex;gap:2px;padding:8px 8px 0;border-bottom:1px solid var(--line)}
+.tabs button{flex:1;background:none;border:0;border-bottom:2px solid transparent;padding:8px 6px 9px;color:var(--muted);cursor:pointer;font-weight:700;font-size:12px;letter-spacing:.03em}
+.tabs button.on{color:var(--text);border-bottom-color:var(--accent)}
+.pane{display:none;overflow:auto;padding:12px;flex:1;overscroll-behavior:contain}
+.pane.on{display:block}
+.h3{margin:14px 0 8px;font-size:10.5px;text-transform:uppercase;letter-spacing:.11em;color:var(--faint);font-weight:700}
+.h3:first-child{margin-top:2px}
+#search{width:100%;background:var(--chip);border:1px solid var(--line);border-radius:9px;padding:9px 11px 9px 34px;outline:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%238798ae' stroke-width='2'%3E%3Ccircle cx='11' cy='11' r='7'/%3E%3Cpath d='m20 20-4-4'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:11px center}
+#search:focus{border-color:var(--accent)}
+.famchips{display:flex;flex-wrap:wrap;gap:5px;margin:10px 0 4px}
+.famchip{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);background:var(--chip);border-radius:20px;padding:3px 10px 3px 8px;cursor:pointer;font:700 11px var(--mono);color:var(--text)}
+.famchip i{width:9px;height:9px;border-radius:50%}
+.famchip.off{opacity:.42}
+.listbar{display:flex;align-items:center;gap:6px;margin:8px 0 2px;color:var(--muted);font-size:11.5px}
+.listbar .sp{flex:1}
+.linkbtn{background:none;border:0;color:var(--accent);cursor:pointer;padding:2px 4px;font-size:11.5px}
+.fam-h{display:flex;align-items:center;gap:8px;font-size:10.5px;color:var(--faint);text-transform:uppercase;letter-spacing:.09em;margin:12px 2px 4px;font-weight:700}
+.fam-h i{width:14px;height:3px;border-radius:2px}
+.ritem{display:grid;grid-template-columns:18px 4px 54px 1fr auto;align-items:center;gap:8px;padding:6px 6px;border-radius:8px;cursor:pointer}
+.ritem:hover{background:var(--chip)}
+.ritem.sel{background:var(--chip2);box-shadow:inset 0 0 0 1px var(--accent)}
+.ritem .bar{width:4px;height:22px;border-radius:2px}
+.ritem b{font-family:var(--mono);font-size:12.5px}
+.ritem span{color:var(--muted);font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ritem em{font-style:normal;color:var(--warn);font-size:12px}
+.ritem.hid b,.ritem.hid span{opacity:.45}
+input[type=checkbox]{accent-color:var(--accent);width:15px;height:15px;margin:0}
+.pchips{display:flex;flex-wrap:wrap;gap:5px;margin-top:8px}
+.chip{font-family:var(--mono);font-size:11.5px;background:var(--chip);border:1px solid var(--line);border-radius:20px;padding:3px 10px;cursor:pointer;white-space:nowrap}
+.chip:hover{border-color:var(--accent)}
+.ctl{margin:8px 0 12px}
+.ctl .lab{display:flex;justify-content:space-between;color:var(--muted);margin-bottom:5px}
+.ctl output{font-family:var(--mono);color:var(--text)}
+input[type=range]{width:100%;accent-color:var(--accent)}
+.toggle{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:7px 2px;border-bottom:1px solid var(--line);cursor:pointer}
+.toggle:last-child{border-bottom:0}
+.toggle small{display:block;color:var(--faint);font-size:11px}
+.sw{position:relative;width:34px;height:20px;flex:none}
+.sw input{position:absolute;opacity:0;inset:0;cursor:pointer;width:100%;height:100%}
+.sw i{position:absolute;inset:0;border-radius:20px;background:var(--chip2);border:1px solid var(--line2);transition:.2s}
+.sw i:after{content:"";position:absolute;width:14px;height:14px;border-radius:50%;top:2px;left:2px;background:var(--muted);transition:.2s}
+.sw input:checked+i{background:var(--accent);border-color:var(--accent)}
+.sw input:checked+i:after{left:16px;background:#fff}
+.hint{color:var(--faint);font-size:11px;margin:4px 0 0}
+.legend{display:grid;grid-template-columns:1fr;gap:6px}
+.legend div{display:flex;align-items:center;gap:10px;color:var(--muted);font-size:12px}
+.legend .ramp{height:10px;border-radius:5px;flex:1}
+
+/* ── Ficha inferior ── */
+#sheet{position:fixed;left:var(--inset-left);right:0;bottom:0;height:var(--sheet-h,40vh);border-radius:16px 16px 0 0;border-bottom:0;z-index:24;display:flex;flex-direction:column;transform:translateY(calc(100% + 10px));transition:transform .34s cubic-bezier(.2,.8,.2,1),left .32s cubic-bezier(.2,.8,.2,1)}
+#sheet.open{transform:none}
+#sheet.dragging{transition:none}
+#grab{height:16px;display:grid;place-items:center;cursor:ns-resize;touch-action:none;flex:none}
+#grab:before{content:"";width:44px;height:4px;border-radius:3px;background:var(--line2)}
+#sHead{display:flex;align-items:flex-start;gap:12px;padding:0 14px 8px;flex:none;touch-action:none}
+#sHead .colorbar{width:5px;align-self:stretch;border-radius:3px;min-height:38px}
+#sHead h2{margin:0;font:700 21px/1.1 var(--mono);letter-spacing:.02em}
+#sHead p{margin:3px 0 0;color:var(--muted);font-size:12px}
+#sChips{display:flex;flex-wrap:wrap;gap:5px;margin-top:7px}
+.kchip{font:11px var(--mono);border:1px solid var(--line);background:var(--chip);border-radius:6px;padding:2px 7px;white-space:nowrap}
+.kchip b{color:var(--muted);font-weight:400;margin-right:4px}
+.kchip.w{border-color:rgba(255,181,71,.45);color:var(--warn)}
+#sBtns{display:flex;gap:6px;margin-left:auto}
+#sTabs{padding:0 10px}
+#sBody{overflow:auto;flex:1;padding:10px 14px 18px;overscroll-behavior:contain}
+.kv{display:grid;grid-template-columns:max-content 1fr;gap:5px 16px;font-size:12px;max-width:820px}
+.kv dt{color:var(--muted)}
+.kv dd{margin:0;font-family:var(--mono)}
+.note{border-left:3px solid var(--warn);background:rgba(255,181,71,.08);padding:7px 10px;border-radius:0 7px 7px 0;margin:6px 0;font-size:12px;max-width:900px}
+.note.info{border-color:var(--accent);background:rgba(92,198,255,.07)}
+table.t{border-collapse:separate;border-spacing:0;width:100%;font-size:11.5px}
+table.t th{position:sticky;top:-10px;background:var(--solid);text-align:left;color:var(--muted);font-weight:700;padding:6px 8px;border-bottom:1px solid var(--line2);white-space:nowrap;z-index:1;font-size:11px}
+table.t td{padding:6px 8px;border-bottom:1px solid var(--line);vertical-align:top;font-family:var(--mono);white-space:nowrap}
+table.t td.obs{white-space:normal;min-width:220px;font-size:11px;color:var(--muted)}
+table.t tbody tr{cursor:pointer}
+table.t tbody tr:hover td{background:var(--chip)}
+table.t tbody tr.hl td{background:var(--chip2)}
+.pt{font-weight:700}
+.sub{color:var(--muted);font-size:10.5px}
+.pend{color:var(--warn)}
+.ok{color:var(--ok)} .wr{color:var(--warn)}
+.tw{overflow-x:auto}
+.foot{color:var(--faint);font-size:11px;margin-top:10px;max-width:900px}
+
+/* ── Superposiciones ── */
+#hud{position:fixed;left:calc(var(--inset-left) + 16px);bottom:calc(var(--inset-bottom) + 14px);z-index:12;display:flex;align-items:flex-end;gap:12px;transition:left .32s cubic-bezier(.2,.8,.2,1),bottom .34s cubic-bezier(.2,.8,.2,1);pointer-events:none}
+#compass{width:40px;height:40px;border-radius:50%;display:grid;place-items:center;pointer-events:auto;cursor:pointer}
+#needle{display:flex;flex-direction:column;align-items:center;font:700 10px var(--mono);line-height:1}
+#needle:before{content:"";border:5px solid transparent;border-bottom:10px solid #ff6b6b;border-top:0;margin-bottom:1px}
+#scale{font:11px var(--mono);color:var(--text);text-shadow:0 1px 4px var(--bg)}
+#scale .bar{height:7px;border:1.5px solid currentColor;border-top:0;margin-top:3px;background:linear-gradient(90deg,currentColor 50%,transparent 50%) bottom/100% 2px no-repeat}
+#tip{position:fixed;pointer-events:none;z-index:40;background:var(--solid);border:1px solid var(--line2);border-radius:7px;padding:4px 9px;font:12px var(--mono);display:none;box-shadow:var(--shadow)}
+#toast{position:fixed;top:calc(var(--top-h) + 14px);left:50%;transform:translateX(-50%);z-index:35;border-radius:20px;padding:7px 14px;font-size:12px;display:none;align-items:center;gap:10px;max-width:92vw}
+#toast .spin{width:14px;height:14px;border:2px solid var(--line2);border-top-color:var(--accent);border-radius:50%;animation:sp 1s linear infinite}
+@keyframes sp{to{transform:rotate(360deg)}}
+#loading{position:fixed;inset:0;display:grid;place-items:center;z-index:60;background:var(--bg);color:var(--muted);font-family:var(--mono);transition:opacity .5s}
+#loading .box{text-align:center;max-width:460px;padding:20px}
+#loading .spin{width:28px;height:28px;margin:0 auto 14px;border:3px solid var(--line2);border-top-color:var(--accent);border-radius:50%;animation:sp 1s linear infinite}
+#backdrop{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:21;display:none}
+dialog{background:var(--solid);color:var(--text);border:1px solid var(--line);border-radius:14px;max-width:min(940px,94vw);width:940px;max-height:88vh;padding:0;box-shadow:var(--shadow)}
+dialog::backdrop{background:rgba(0,0,0,.55)}
+dialog .dh{display:flex;align-items:center;gap:10px;padding:12px 16px;border-bottom:1px solid var(--line);position:sticky;top:0;background:var(--solid);z-index:2}
+dialog .dh h2{margin:0;font-size:16px;flex:1}
+dialog .db{padding:12px 18px 20px;overflow:auto;max-height:calc(88vh - 62px)}
+dialog h4{margin:18px 0 6px;font-size:11px;text-transform:uppercase;letter-spacing:.09em;color:var(--muted)}
+dialog ol{padding-left:20px;margin:0} dialog li{margin:5px 0}
+
+/* ── Móvil ── */
+@media (max-width: 820px){
+  :root{--top-h:100px;--drawer-w:min(88vw,360px)}
+  #top{flex-wrap:wrap;align-content:center;gap:8px;padding:6px 10px;padding-top:max(6px,env(safe-area-inset-top))}
+  #brand .s{display:none}
+  #actions{margin-left:auto}
+  #actions .desk{display:none}
+  #modeSeg{order:3;width:100%;margin:0}
+  #drawer{top:0;left:0;bottom:0;border-radius:0 16px 16px 0;z-index:32}
+  #views{display:flex!important}
+  #sHead h2{font-size:18px}
+  #sBtns .lbl{display:none}
+}
+#views{position:fixed;right:10px;top:calc(var(--top-h) + 10px);z-index:12;display:none;flex-direction:column;gap:6px}
+</style>
+</head>
+<body>
+<canvas id="c" tabindex="0"></canvas>
+<div id="loading"><div class="box"><div class="spin"></div><div id="ldMsg">Cargando visor 3D…</div></div></div>
+
+<!-- Iconos -->
+<svg width="0" height="0" style="position:absolute">
+  <symbol id="i-menu" viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></symbol>
+  <symbol id="i-top" viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="2"/><circle cx="12" cy="12" r="2.2"/></symbol>
+  <symbol id="i-side" viewBox="0 0 24 24"><path d="M3 18h18M6 14h12M8 10h8M10 6h4"/></symbol>
+  <symbol id="i-reset" viewBox="0 0 24 24"><path d="M4 12a8 8 0 1 0 2.4-5.7"/><path d="M4 4v4h4"/></symbol>
+  <symbol id="i-theme" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 4a8 8 0 0 1 0 16z" fill="currentColor"/></symbol>
+  <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.5v.5"/></symbol>
+  <symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></symbol>
+  <symbol id="i-target" viewBox="0 0 24 24"><circle cx="12" cy="12" r="7"/><path d="M12 2v4M12 18v4M2 12h4M18 12h4"/></symbol>
+  <symbol id="i-expand" viewBox="0 0 24 24"><path d="M8 9l4-4 4 4M8 15l4 4 4-4"/></symbol>
+</svg>
+
+<header id="top" class="glass">
+  <div id="brand">
+    <button class="btn icon" id="bMenu" title="Panel de rutas y ajustes" aria-label="Panel de rutas y ajustes"><svg class="i"><use href="#i-menu"/></svg></button>
+    <div><div class="t">FIR Panamá · Rutas superiores</div><div class="s">AIP Panamá · ENR 3.2 / 3.3 / 4.1 · uso didáctico</div></div>
+  </div>
+  <div class="seg" id="modeSeg" role="tablist" aria-label="Modo de visualización">
+    <button data-m="plane">Plano único</button><button data-m="layers" class="on">Capas</button><button data-m="fl">Altitud FL</button>
+  </div>
+  <div id="actions">
+    <button class="btn icon desk" id="vTop" title="Vista superior"><svg class="i"><use href="#i-top"/></svg></button>
+    <button class="btn icon desk" id="vSide" title="Vista lateral"><svg class="i"><use href="#i-side"/></svg></button>
+    <button class="btn icon desk" id="vReset" title="Reiniciar vista"><svg class="i"><use href="#i-reset"/></svg></button>
+    <span class="sep desk"></span>
+    <button class="btn icon" id="bTheme" title="Tema claro / oscuro"><svg class="i"><use href="#i-theme"/></svg></button>
+    <button class="btn icon" id="bAbout" title="Acerca de, fuentes y verificación"><svg class="i"><use href="#i-info"/></svg></button>
+  </div>
+</header>
+<div id="views">
+  <button class="btn icon glass" id="vTop2" title="Vista superior"><svg class="i"><use href="#i-top"/></svg></button>
+  <button class="btn icon glass" id="vSide2" title="Vista lateral"><svg class="i"><use href="#i-side"/></svg></button>
+  <button class="btn icon glass" id="vReset2" title="Reiniciar vista"><svg class="i"><use href="#i-reset"/></svg></button>
+</div>
+
+<div id="backdrop"></div>
+<aside id="drawer" class="glass">
+  <nav class="tabs" id="dTabs"><button data-t="pRoutes" class="on">Rutas</button><button data-t="pSettings">Ajustes</button><button data-t="pLegend">Leyenda</button></nav>
+  <div class="pane on" id="pRoutes">
+    <input id="search" type="search" placeholder="Buscar ruta o punto: UL780, TIMRO, TBG…" autocomplete="off" aria-label="Buscar ruta o punto">
+    <div class="pchips" id="pMatches"></div>
+    <div class="famchips" id="famChips"></div>
+    <div class="listbar"><span id="visCount"></span><span class="sp"></span><button class="linkbtn" id="bAll">Ver todas</button><button class="linkbtn" id="bNone">Ocultar todas</button></div>
+    <div id="rlist"></div>
+  </div>
+  <div class="pane" id="pSettings">
+    <div class="h3">Vista</div>
+    <div id="ctlLayers">
+      <div class="ctl"><div class="lab"><span>Espaciado entre capas</span><output id="oSpacing"></output></div><input type="range" id="spacing" min="2" max="40" step="1" value="14"></div>
+      <div class="ctl"><div class="lab"><span>Apilar capas por</span></div><div class="seg" id="groupSeg"><button data-g="family" class="on">Familia (6 capas)</button><button data-g="route">Ruta (36 capas)</button></div></div>
+    </div>
+    <div class="ctl" id="ctlExag"><div class="lab"><span>Exageración vertical (FL y relieve)</span><output id="oExag"></output></div><input type="range" id="exag" min="1" max="30" step="1" value="5"><p class="hint">En modo Altitud FL el relieve usa la misma exageración que los niveles, para que la proporción sea real.</p></div>
+    <div class="ctl" id="ctlRelief"><div class="lab"><span>Exageración del relieve</span><output id="oRelief"></output></div><input type="range" id="relief" min="1" max="40" step="1" value="10"></div>
+    <div class="h3">Mapa</div>
+    <label class="toggle"><span>Relieve 3D<small id="reliefState">Cargando…</small></span><span class="sw"><input type="checkbox" id="cRelief" checked><i></i></span></label>
+    <label class="toggle"><span>Fronteras</span><span class="sw"><input type="checkbox" id="cBorders" checked><i></i></span></label>
+    <label class="toggle"><span>Contorno FIR (aprox.)</span><span class="sw"><input type="checkbox" id="cFir" checked><i></i></span></label>
+    <label class="toggle"><span>FIR adyacentes<small>Kingston · Centroamericana · Barranquilla · Bogotá</small></span><span class="sw"><input type="checkbox" id="cAdj" checked><i></i></span></label>
+    <label class="toggle"><span>Contorno FIR en cada capa<small>En modo Capas, el límite del FIR sube con sus rutas</small></span><span class="sw"><input type="checkbox" id="cFirLayers" checked><i></i></span></label>
+    <label class="toggle"><span>Cuadrícula de 1°</span><span class="sw"><input type="checkbox" id="cGrid" checked><i></i></span></label>
+    <label class="toggle"><span>Radioayudas VOR/DME<small>Muestra u oculta todas a la vez (9)</small></span><span class="sw"><input type="checkbox" id="cNavOther" checked><i></i></span></label>
+    <label class="toggle"><span>Líneas verticales a los puntos</span><span class="sw"><input type="checkbox" id="cDrops" checked><i></i></span></label>
+    <div class="h3">Etiquetas</div>
+    <label class="toggle"><span>Nombres de puntos</span><span class="sw"><input type="checkbox" id="cLblPts" checked><i></i></span></label>
+    <label class="toggle"><span>Nombres de rutas</span><span class="sw"><input type="checkbox" id="cLblRts" checked><i></i></span></label>
+    <label class="toggle"><span>Distancia y rumbo en la ruta seleccionada</span><span class="sw"><input type="checkbox" id="cLegLbl" checked><i></i></span></label>
+    <label class="toggle"><span>Ocultar etiquetas superpuestas<small>Muestra solo las que caben sin taparse</small></span><span class="sw"><input type="checkbox" id="cDeclutter" checked><i></i></span></label>
+    <div class="h3">Calidad gráfica</div>
+    <div class="seg" id="qualSeg"><button data-q="low">Baja</button><button data-q="mid">Media</button><button data-q="high">Alta</button></div>
+    <p class="hint">Resolución del relieve y nitidez de pantalla. Use Baja/Media en teléfonos antiguos.</p>
+  </div>
+  <div class="pane" id="pLegend"><div class="legend" id="legend"></div></div>
+</aside>
+
+<section id="sheet" class="glass" aria-live="polite">
+  <div id="grab" title="Arrastre para cambiar el tamaño"></div>
+  <div id="sHead">
+    <span class="colorbar" id="sColor"></span>
+    <div style="min-width:0;flex:1"><h2 id="sTitle"></h2><p id="sSub"></p><div id="sChips"></div></div>
+    <div id="sBtns">
+      <button class="btn" id="bFocus" title="Encuadrar"><svg class="i"><use href="#i-target"/></svg><span class="lbl">Centrar</span></button>
+      <button class="btn icon" id="bExpand" title="Ampliar / reducir"><svg class="i"><use href="#i-expand"/></svg></button>
+      <button class="btn icon" id="bClose" title="Cerrar (Esc)"><svg class="i"><use href="#i-x"/></svg></button>
+    </div>
+  </div>
+  <nav class="tabs" id="sTabs"></nav>
+  <div id="sBody"></div>
+</section>
+
+<div id="hud"><div id="compass" class="glass" title="Norte — clic para orientar al norte"><div id="needle">N</div></div><div id="scale"><div id="scaleLbl"></div><div class="bar" id="scaleBar"></div></div></div>
+<div id="tip"></div>
+<div id="toast" class="glass"><span class="spin"></span><span id="toastMsg"></span></div>
+<dialog id="about"><div class="dh"><h2>Acerca de · fuentes y verificación</h2><button class="btn icon" id="bAboutClose"><svg class="i"><use href="#i-x"/></svg></button></div><div class="db" id="aboutBody"></div></dialog>
+
+<!-- ═══════════════════════════ DATOS AIP (JSON editable) ═══════════════════════════
+  points{}: id, name, kind (NAV|WPT), navType, coord (formato AIP), lat/lon (WGS-84 decimal), freq, ch, var, elev, firBdry, notes[], src, routes[]
+  routes[]: id, family, kind, src, points[], legs[] {dist NM publicada, fwd/rev rumbo MAG publicado (null = no publicado), note},
+            lower, upper, cls, mea, unit, freqs[], compulsory[], remarks[], nav, dirNote, status
+  Distancias y rumbos verdaderos se recalculan en el navegador (geodésica WGS-84, Vincenty). -->
+<script type="application/json" id="datos-aip">
+{
+ "points": {
+  "TBG": {
+   "id": "TBG",
+   "name": "TABOGA",
+   "kind": "NAV",
+   "navType": "DVOR/DME",
+   "coord": "084715.26N 0793343.28W",
+   "lat": 8.787572222222222,
+   "lon": -79.56202222222223,
+   "freq": "110.0 MHz",
+   "ch": "37X",
+   "var": "4°W (2015)",
+   "elev": "1045 ft",
+   "src": "ENR 4.1-3 (30 JUN 25)",
+   "notes": [],
+   "country": "Panamá",
+   "routes": [
+    "UA317",
+    "UA502",
+    "UG440",
+    "UL335",
+    "UL347",
+    "UL465",
+    "UL474",
+    "UL780",
+    "UM419",
+    "UM525",
+    "UM542",
+    "UM549",
+    "UM597",
+    "UM674",
+    "UN420",
+    "UP527",
+    "UP650",
+    "UP790"
+   ]
+  },
+  "DAV": {
+   "id": "DAV",
+   "name": "DAVID",
+   "kind": "NAV",
+   "navType": "VOR/DME",
+   "coord": "082309.22N 0822615.38W",
+   "lat": 8.385894444444444,
+   "lon": -82.43760555555556,
+   "freq": "114.300 MHz",
+   "ch": "90X",
+   "var": "4°W (2025)",
+   "elev": "89 ft",
+   "src": "ENR 4.1-1 (30 DEC 25)",
+   "notes": [],
+   "country": "Panamá",
+   "routes": [
+    "UA502"
+   ]
+  },
+  "BDT": {
+   "id": "BDT",
+   "name": "BOCAS DEL TORO",
+   "kind": "NAV",
+   "navType": "VOR/DME",
+   "coord": "092019.86N 0821506.34W",
+   "lat": 9.33885,
+   "lon": -82.25176111111111,
+   "freq": "114.9 MHz",
+   "ch": "96X",
+   "var": "1°W (2006)",
+   "elev": "NIL",
+   "src": "ENR 4.1-1 (30 DEC 25)",
+   "notes": [
+    "SUP A42/25: fuera de servicio hasta 01 OCT 2026. Estado actual pendiente de verificar (NOTAM/SUP vigente)."
+   ],
+   "country": "Panamá",
+   "routes": [
+    "UG440"
+   ]
+  },
+  "PML": {
+   "id": "PML",
+   "name": "LA PALMA",
+   "kind": "NAV",
+   "navType": "VOR/DME",
+   "coord": "082422.39N 0780818.88W",
+   "lat": 8.406219444444444,
+   "lon": -78.13857777777778,
+   "freq": "113.1 MHz",
+   "ch": "78X",
+   "var": "5°W (2018)",
+   "elev": "224.4 ft",
+   "src": "ENR 4.1-2 (30 DEC 18)",
+   "notes": [],
+   "country": "Panamá",
+   "routes": [
+    "UM795",
+    "UN653"
+   ]
+  },
+  "TUM": {
+   "id": "TUM",
+   "name": "TOCUMEN",
+   "kind": "NAV",
+   "navType": "DVOR/DME",
+   "coord": "090305.62N 0792400.21W",
+   "lat": 9.051561111111111,
+   "lon": -79.40005833333333,
+   "freq": "117.1 MHz",
+   "ch": "118X",
+   "var": "4°W (2014)",
+   "elev": "52 ft",
+   "src": "ENR 4.1-4 (30 DEC 18)",
+   "notes": [],
+   "country": "Panamá",
+   "routes": []
+  },
+  "FNC": {
+   "id": "FNC",
+   "name": "FRANCE",
+   "kind": "NAV",
+   "navType": "DVOR/DME",
+   "coord": "092124.26N 0795210.18W",
+   "lat": 9.356738888888888,
+   "lon": -79.86949444444444,
+   "freq": "109.0 MHz",
+   "ch": "27X",
+   "var": "4°W (2014)",
+   "elev": "56 ft",
+   "src": "ENR 4.1-2 (30 DEC 18)",
+   "notes": [],
+   "country": "Panamá",
+   "routes": []
+  },
+  "RHT": {
+   "id": "RHT",
+   "name": "RÍO HATO",
+   "kind": "NAV",
+   "navType": "DVOR/DME",
+   "coord": "082232.28N 0800736.61W",
+   "lat": 8.375633333333333,
+   "lon": -80.1268361111111,
+   "freq": "116.500 MHz",
+   "ch": "112X",
+   "var": "4°W (2023)",
+   "elev": "126 ft",
+   "src": "ENR 4.1-3 (30 JUN 25)",
+   "notes": [],
+   "country": "Panamá",
+   "routes": []
+  },
+  "STG": {
+   "id": "STG",
+   "name": "SANTIAGO",
+   "kind": "NAV",
+   "navType": "VOR/DME",
+   "coord": "080520.48N 0805623.00W",
+   "lat": 8.089022222222223,
+   "lon": -80.93972222222223,
+   "freq": "114.5 MHz",
+   "ch": "92X",
+   "var": "2°W (2012)",
+   "elev": "381 ft",
+   "src": "ENR 4.1-3 (30 JUN 25)",
+   "notes": [],
+   "country": "Panamá",
+   "routes": []
+  },
+  "SPP": {
+   "id": "SPP",
+   "name": "SAN ANDRÉS",
+   "kind": "NAV",
+   "navType": "DVOR/DME",
+   "coord": "123456N 0814219W",
+   "lat": 12.582222222222223,
+   "lon": -81.70527777777778,
+   "freq": "113.3 MHz",
+   "ch": "80X",
+   "var": "pendiente de verificar",
+   "elev": "182 ft (ERC)",
+   "src": "ENR 6.1A (30 JUN 26) — no figura en ENR 4.1 Panamá",
+   "notes": [
+    "Radioayuda de San Andrés (Colombia) usada por rutas del FIR Panamá. Variación y datos completos: AIP Colombia (pendiente)."
+   ],
+   "country": "Colombia",
+   "routes": [
+    "UA552",
+    "UL667",
+    "UM205",
+    "UN420",
+    "UN653",
+    "UP401",
+    "UP530",
+    "UP536",
+    "UP543",
+    "UP671",
+    "UP798"
+   ]
+  },
+  "BUFEO": {
+   "id": "BUFEO",
+   "name": "BUFEO",
+   "kind": "WPT",
+   "coord": "094859N 0823414W",
+   "lat": 9.81638888888889,
+   "lon": -82.57055555555556,
+   "firBdry": true,
+   "src": "ENR 3.2/3.3 y ENR 6.1A",
+   "notes": [],
+   "routes": [
+    "UA317"
+   ]
+  },
+  "BITOR": {
+   "id": "BITOR",
+   "name": "BITOR",
+   "kind": "WPT",
+   "coord": "091605N 0805959W",
+   "lat": 9.268055555555556,
+   "lon": -80.99972222222222,
+   "firBdry": false,
+   "src": "ENR 3.2/3.3 y ENR 6.1A",
+   "notes": [],
+   "routes": [
+    "UA317"
+   ]
+  },
+  "POXON": {
+   "id": "POXON",
+   "name": "POXON",
+   "kind": "WPT",
+   "coord": "083319N 0825033W",
+   "lat": 8.555277777777778,
+   "lon": -82.8425,
+   "firBdry": true,
+   "src": "ENR 3.2/3.3 y ENR 6.1A",
+   "notes": [
+    "Discrepancia: ENR 3.2-1 da 083319N 0825033W; ENR 4.4-10 da 083311N 0825006W (≈0.4 NM). Se usa ENR 3.2. Pendiente de verificar."
+   ],
+   "routes": [
+    "UA502"
+   ]
+  },
+  "RONAM": {
+   "id": "RONAM",
+   "name": "RONAM",
+   "kind": "WPT",
+   "coord": "083511N 0810011W",
+   "lat": 8.586388888888889,
+   "lon": -81.00305555555556,
+   "firBdry": false,
+   "src": "ENR 3.2/3.3 y ENR 6.1A",
+   "notes": [],
+   "routes": [
+    "UA502"
+   ]
+  },
+  "FALLA": {
+   "id": "FALLA",
+   "name": "FALLA",
+   "kind": "WPT",
+   "coord": "132600N 0824000W",
+   "lat": 13.433333333333334,
+   "lon": -82.66666666666667,
+   "firBdry": true,
+   "src": "ENR 3.2/3.3 y ENR 6.1A",
+   "notes": [],
+   "routes": [
+    "UA552"
+   ]
+  },
+  "ISEBA": {
+   "id": "ISEBA",
+   "name": "ISEBA",
+   "kind": "WPT",
+   "coord": "093229N 0825212W",
+   "lat": 9.54138888888889,
+   "lon": -82.86999999999999,
+   "firBdry": true,
+   "src": "ENR 3.2/3.3 y ENR 6.1A",
+   "notes": [],
+   "compulsory": true,
+   "routes": [
+    "UG440",
+    "UL423"
+   ]
+  },
+  "PUDOS": {
+   "id": "PUDOS",
+   "name": "PUDOS",
+   "kind": "WPT",
+   "coord": "090502N 0810253W",
+   "lat": 9.08388888888889,
+   "lon": -81.04805555555555,
+   "firBdry": false,
+   "src": "ENR 3.2/3.3 y ENR 6.1A",
+   "notes": [],
+   "routes": [
+    "UG440"
+   ]
+  },
+  "PONPO": {
+   "id": "PONPO",
+   "name": "PONPO",
+   "kind": "WPT",
+   "coord": "091612N 0781158W",
+   "lat": 9.270000000000001,
+   "lon": -78.19944444444445,
+   "firBdry": false,
+   "src": "ENR 3.2/3.3 y ENR 6.1A",
+   "notes": [],
+   "routes": [
+    "UL335",
+    "UP530"
+   ]
+  },
+  "BOGAL": {
+   "id": "BOGAL",
+   "name": "BOGAL",
+   "kind": "WPT",
+   "coord": "093406N 0772500W",
+   "lat": 9.568333333333333,
+   "lon": -77.41666666666667,
+   "firBdry": false,
+   "src": "ENR 3.2/3.3 y ENR 6.1A",
+   "notes": [],
+   "routes": [
+    "UL335"
+   ]
+  },
+  "KASOR": {
+   "id": "KASOR",
+   "name": "KASOR",
+   "kind": "WPT",
+   "coord": "150000N 0774143W",
+   "lat": 15.0,
+   "lon": -77.69527777777778,
+   "firBdry": true,
+   "src": "ENR 3.2/3.3 y ENR 6.1A",
+   "notes": [],
+   "routes": [
+    "UL347"
+   ]
+  },
+  "EKENA": {
+   "id": "EKENA",
+   "name": "EKENA",
+   "kind": "WPT",
+   "coord": "133430N 0780754W",
+   "lat": 13.575,
+   "lon": -78.13166666666666,
+   "firBdry": false,
+   "src": "ENR 3.2/3.3 y ENR 6.1A",
+   "notes": [],
+   "routes": [
+    "UL347"
+   ]
+  },
+  "TIMRO": {
+   "id": "TIMRO",
+   "name": "TIMRO",
+   "kind": "WPT",
+   "coord": "114804N 0784159W",
+   "lat": 11.801111111111112,
+   "lon": -78.69972222222222,
+   "firBdry": false,
+   "src": "ENR 3.2/3.3 y ENR 6.1A",
+   "notes": [],
+   "compulsory": true,
+   "routes": [
+    "UL347",
+    "UP671"
+   ]
+  },
+  "ILTUR": {
+   "id": "ILTUR",
+   "name": "ILTUR",
+   "kind": "WPT",
+   "coord": "065021N 0781250W",
+   "lat": 6.839166666666666,
+   "lon": -78.21388888888889,
+   "firBdry": true,
+   "src": "ENR 3.2/3.3 y ENR 6.1A",
+   "notes": [],
+   "routes": [
+    "UL423",
+    "UM795"
+   ]
+  },
+  "URODU": {
+   "id": "URODU",
+   "name": "URODU",
+   "kind": "WPT",
+   "coord": "070719N 0784140W",
+   "lat": 7.121944444444444,
+   "lon": -78.69444444444444,
+   "firBdry": false,
+   "src": "ENR 3.2/3.3 y ENR 6.1A",
+   "notes": [],
+   "routes": [
+    "UL423"
+   ]
+  },
+  "SEKMA": {
+   "id": "SEKMA",
+   "name": "SEKMA",
+   "kind": "WPT",
+   "coord": "102510N 0795026W",
+   "lat": 10.419444444444444,
+   "lon": -79.84055555555555,
+   "firBdry": false,
+   "src": "ENR 3.2/3.3 y ENR 6.1A",
+   "notes": [],
+   "compulsory": true,
+   "routes": [
+    "UL465",
+    "UN653"
+   ]
+  },
+  "ARNAL": {
+   "id": "ARNAL",
+   "name": "ARNAL",
+   "kind": "WPT",
+   "coord": "150000N 0803651W",
+   "lat": 15.0,
+   "lon": -80.61416666666666,
+   "firBdry": true,
+   "src": "ENR 3.2/3.3 y ENR 6.1A",
+   "notes": [],
+   "compulsory": true,
+   "routes": [
+    "UL465",
+    "UM782"
+   ]
+  },
+  "MANBO": {
+   "id": "MANBO",
+   "name": "MANBO",
+   "kind": "WPT",
+   "coord": "110821N 0775257W",
+   "lat": 11.139166666666666,
+   "lon": -77.8825,
+   "firBdry": false,
+   "src": "ENR 3.2/3.3 y ENR 6.1A",
+   "notes": [],
+   "routes": [
+    "UL474"
+   ]
+  },
+  "MABNA": {
+   "id": "MABNA",
+   "name": "MABNA",
+   "kind": "WPT",
+   "coord": "113109N 0773629W",
+   "lat": 11.519166666666667,
+   "lon": -77.60805555555555,
+   "firBdry": false,
+   "src": "ENR 3.2/3.3 y ENR 6.1A",
+   "notes": [],
+   "routes": [
+    "UL474"
+   ]
+  },
+  "ROKIN": {
+   "id": "ROKIN",
+   "name": "ROKIN",
+   "kind": "WPT",
+   "coord": "114700N 0772500W",
+   "lat": 11.783333333333333,
+   "lon": -77.41666666666667,
+   "firBdry": true,
+   "src": "ENR 3.2/3.3 y ENR 6.1A",
+   "notes": [],
+   "routes": [
+    "UL474"
+   ]
+  },
+  "ASEPI": {
+   "id": "ASEPI",
+   "name": "ASEPI",
+   "kind": "WPT",
+   "coord": "054346N 0792018W",
+   "lat": 5.729444444444445,
+   "lon": -79.33833333333332,
+   "firBdry": true,
+   "src": "ENR 3.2/3.3 y ENR 6.1A",
+   "notes": [],
+   "routes": [
+    "UL655"
+   ]
+  },
+  "ASIBO": {
+   "id": "ASIBO",
+   "name": "ASIBO",
+   "kind": "WPT",
+   "coord": "060008N 0793819W",
+   "lat": 6.002222222222223,
+   "lon": -79.63861111111112,
+   "firBdry": false,
+   "src": "ENR 3.2/3.3 y ENR 6.1A",
+   "notes": [],
+   "routes": [
+    "UL655"
+   ]
+  },
+  "EGODI": {
+   "id": "EGODI",
+   "name": "EGODI",
+   "kind": "WPT",
+   "coord": "085142N 0824906W",
+   "lat": 8.861666666666666,
+   "lon": -82.81833333333333,
+   "firBdry": true,
+   "src": "ENR 3.2/3.3 y ENR 6.1A",
+   "notes": [],
+   "routes": [
+    "UL655"
+   ]
+  },
+  "DAGAS": {
+   "id": "DAGAS",
+   "name": "DAGAS",
+   "kind": "WPT",
+   "coord": "113804N 0790759W",
+   "lat": 11.634444444444444,
+   "lon": -79.13305555555554,
+   "firBdry": false,
+   "src": "ENR 3.2/3.3 y ENR 6.1A",
+   "notes": [],
+   "routes": [
+    "UL667",
+    "UM542"
+   ]
+  },
+  "AGUJA": {
+   "id": "AGUJA",
+   "name": "AGUJA",
+   "kind": "WPT",
+   "coord": "105904N 0772459W",
+   "lat": 10.984444444444444,
+   "lon": -77.41638888888889,
+   "firBdry": true,
+   "src": "ENR 3.2/3.3 y ENR 6.1A",
+   "notes": [],
+   "compulsory": true,
+   "routes": [
+    "UL667",
+    "UM597",
+    "UM782"
+   ]
+  },
+  "BUXOS": {
+   "id": "BUXOS",
+   "name": "BUXOS",
+   "kind": "WPT",
+   "coord": "051006N 0793959W",
+   "lat": 5.168333333333334,
+   "lon": -79.66638888888889,
+   "firBdry": true,
+   "src": "ENR 3.2/3.3 y ENR 6.1A",
+   "notes": [],
+   "routes": [
+    "UL780"
+   ]
+  },
+  "TORIL": {
+   "id": "TORIL",
+   "name": "TORIL",
+   "kind": "WPT",
+   "coord": "071652N 0793624W",
+   "lat": 7.281111111111111,
+   "lon": -79.60666666666665,
+   "firBdry": false,
+   "src": "ENR 3.2/3.3 y ENR 6.1A",
+   "notes": [],
+   "routes": [
+    "UL780"
+   ]
+  },
+  "VUNIB": {
+   "id": "VUNIB",
+   "name": "VUNIB",
+   "kind": "WPT",
+   "coord": "103140N 0793002W",
+   "lat": 10.527777777777779,
+   "lon": -79.50055555555555,
+   "firBdry": false,
+   "src": "ENR 3.2/3.3 y ENR 6.1A",
+   "notes": [],
+   "routes": [
+    "UL780",
+    "UP530"
+   ]
+  },
+  "DAGUD": {
+   "id": "DAGUD",
+   "name": "DAGUD",
+   "kind": "WPT",
+   "coord": "150000N 0791942W",
+   "lat": 15.0,
+   "lon": -79.32833333333333,
+   "firBdry": true,
+   "src": "ENR 3.2/3.3 y ENR 6.1A",
+   "notes": [],
+   "routes": [
+    "UL780"
+   ]
+  },
+  "TEKUG": {
+   "id": "TEKUG",
+   "name": "TEKUG",
+   "kind": "WPT",
+   "coord": "135340N 0823241W",
+   "lat": 13.894444444444444,
+   "lon": -82.54472222222222,
+   "firBdry": false,
+   "src": "ENR 3.2/3.3 y ENR 6.1A",
+   "notes": [
+    "ENR 3.3-4 imprime \"0823241 W\" (espacio tipográfico); ENR 4.4 confirma 0823241W."
+   ],
+   "routes": [
+    "UM205"
+   ]
+  },
+  "PAPIN": {
+   "id": "PAPIN",
+   "name": "PAPIN",
+   "kind": "WPT",
+   "coord": "062400N 0825500W",
+   "lat": 6.4,
+   "lon": -82.91666666666667,
+   "firBdry": true,
+   "src": "ENR 3.2/3.3 y ENR 6.1A",
+   "notes": [],
+   "routes": [
+    "UM328"
+   ]
+  },
+  "IRASO": {
+   "id": "IRASO",
+   "name": "IRASO",
+   "kind": "WPT",
+   "coord": "043102N 0813625W",
+   "lat": 4.517222222222222,
+   "lon": -81.60694444444444,
+   "firBdry": true,
+   "src": "ENR 3.2/3.3 y ENR 6.1A",
+   "notes": [],
+   "routes": [
+    "UM328"
+   ]
+  },
+  "AROVI": {
+   "id": "AROVI",
+   "name": "AROVI",
+   "kind": "WPT",
+   "coord": "093530N 0805040W",
+   "lat": 9.591666666666667,
+   "lon": -80.84444444444443,
+   "firBdry": false,
+   "src": "ENR 3.2/3.3 y ENR 6.1A",
+   "notes": [],
+   "routes": [
+    "UM419"
+   ]
+  },
+  "ANSON": {
+   "id": "ANSON",
+   "name": "ANSON",
+   "kind": "WPT",
+   "coord": "104226N 0823809W",
+   "lat": 10.70722222222222,
+   "lon": -82.63583333333334,
+   "firBdry": true,
+   "src": "ENR 3.2/3.3 y ENR 6.1A",
+   "notes": [],
+   "routes": [
+    "UM419",
+    "UP401"
+   ]
+  },
+  "SIROT": {
+   "id": "SIROT",
+   "name": "SIROT",
+   "kind": "WPT",
+   "coord": "093753N 0783306W",
+   "lat": 9.631388888888889,
+   "lon": -78.55166666666666,
+   "firBdry": false,
+   "src": "ENR 3.2/3.3 y ENR 6.1A",
+   "notes": [],
+   "routes": [
+    "UM525"
+   ]
+  },
+  "BITIX": {
+   "id": "BITIX",
+   "name": "BITIX",
+   "kind": "WPT",
+   "coord": "103414N 0772500W",
+   "lat": 10.570555555555556,
+   "lon": -77.41666666666667,
+   "firBdry": true,
+   "src": "ENR 3.2/3.3 y ENR 6.1A",
+   "notes": [],
+   "routes": [
+    "UM525"
+   ]
+  },
+  "COLBY": {
+   "id": "COLBY",
+   "name": "COLBY",
+   "kind": "WPT",
+   "coord": "150000N 0783159W",
+   "lat": 15.0,
+   "lon": -78.53305555555555,
+   "firBdry": true,
+   "src": "ENR 3.2/3.3 y ENR 6.1A",
+   "notes": [],
+   "compulsory": true,
+   "routes": [
+    "UM542",
+    "UM795"
+   ]
+  },
+  "REPIT": {
+   "id": "REPIT",
+   "name": "REPIT",
+   "kind": "WPT",
+   "coord": "102504N 0791759W",
+   "lat": 10.417777777777777,
+   "lon": -79.29972222222221,
+   "firBdry": false,
+   "src": "ENR 3.2/3.3 y ENR 6.1A",
+   "notes": [],
+   "routes": [
+    "UM542"
+   ]
+  },
+  "RODAX": {
+   "id": "RODAX",
+   "name": "RODAX",
+   "kind": "WPT",
+   "coord": "074558N 0794739W",
+   "lat": 7.766111111111111,
+   "lon": -79.79416666666667,
+   "firBdry": false,
+   "src": "ENR 3.2/3.3 y ENR 6.1A",
+   "notes": [],
+   "routes": [
+    "UM542"
+   ]
+  },
+  "DABON": {
+   "id": "DABON",
+   "name": "DABON",
+   "kind": "WPT",
+   "coord": "062510N 0800554W",
+   "lat": 6.419444444444445,
+   "lon": -80.09833333333333,
+   "firBdry": false,
+   "src": "ENR 3.2/3.3 y ENR 6.1A",
+   "notes": [],
+   "routes": [
+    "UM542"
+   ]
+  },
+  "TINPA": {
+   "id": "TINPA",
+   "name": "TINPA",
+   "kind": "WPT",
+   "coord": "043015N 0803053W",
+   "lat": 4.504166666666666,
+   "lon": -80.51472222222222,
+   "firBdry": true,
+   "src": "ENR 3.2/3.3 y ENR 6.1A",
+   "notes": [],
+   "routes": [
+    "UM542"
+   ]
+  },
+  "SIGUN": {
+   "id": "SIGUN",
+   "name": "SIGUN",
+   "kind": "WPT",
+   "coord": "072314N 0775025W",
+   "lat": 7.387222222222222,
+   "lon": -77.84027777777777,
+   "firBdry": true,
+   "src": "ENR 3.2/3.3 y ENR 6.1A",
+   "notes": [],
+   "routes": [
+    "UM549"
+   ]
+  },
+  "OGLUT": {
+   "id": "OGLUT",
+   "name": "OGLUT",
+   "kind": "WPT",
+   "coord": "043142N 0822347W",
+   "lat": 4.528333333333333,
+   "lon": -82.3963888888889,
+   "firBdry": true,
+   "src": "ENR 3.2/3.3 y ENR 6.1A",
+   "notes": [],
+   "routes": [
+    "UM659"
+   ]
+  },
+  "LESIR": {
+   "id": "LESIR",
+   "name": "LESIR",
+   "kind": "WPT",
+   "coord": "055346N 0825500W",
+   "lat": 5.896111111111111,
+   "lon": -82.91666666666667,
+   "firBdry": true,
+   "src": "ENR 3.2/3.3 y ENR 6.1A",
+   "notes": [],
+   "routes": [
+    "UM659"
+   ]
+  },
+  "MILAT": {
+   "id": "MILAT",
+   "name": "MILAT",
+   "kind": "WPT",
+   "coord": "071759N 0792311W",
+   "lat": 7.299722222222222,
+   "lon": -79.3863888888889,
+   "firBdry": false,
+   "src": "ENR 3.2/3.3 y ENR 6.1A",
+   "notes": [],
+   "compulsory": true,
+   "routes": [
+    "UM674"
+   ]
+  },
+  "TOKUT": {
+   "id": "TOKUT",
+   "name": "TOKUT",
+   "kind": "WPT",
+   "coord": "055623N 0791329W",
+   "lat": 5.939722222222223,
+   "lon": -79.22472222222223,
+   "firBdry": true,
+   "src": "ENR 3.2/3.3 y ENR 6.1A",
+   "notes": [],
+   "routes": [
+    "UM674"
+   ]
+  },
+  "LONET": {
+   "id": "LONET",
+   "name": "LONET",
+   "kind": "WPT",
+   "coord": "132308N 0791845W",
+   "lat": 13.385555555555555,
+   "lon": -79.3125,
+   "firBdry": false,
+   "src": "ENR 3.2/3.3 y ENR 6.1A",
+   "notes": [],
+   "routes": [
+    "UM782"
+   ]
+  },
+  "ROPOL": {
+   "id": "ROPOL",
+   "name": "ROPOL",
+   "kind": "WPT",
+   "coord": "133805N 0772500W",
+   "lat": 13.634722222222221,
+   "lon": -77.41666666666667,
+   "firBdry": true,
+   "src": "ENR 3.2/3.3 y ENR 6.1A",
+   "notes": [],
+   "routes": [
+    "UM787"
+   ]
+  },
+  "NELUR": {
+   "id": "NELUR",
+   "name": "NELUR",
+   "kind": "WPT",
+   "coord": "140747N 0791618W",
+   "lat": 14.129722222222222,
+   "lon": -79.27166666666666,
+   "firBdry": false,
+   "src": "ENR 3.2/3.3 y ENR 6.1A",
+   "notes": [],
+   "routes": [
+    "UM787"
+   ]
+  },
+  "KIKOL": {
+   "id": "KIKOL",
+   "name": "KIKOL",
+   "kind": "WPT",
+   "coord": "144332N 0813604W",
+   "lat": 14.725555555555555,
+   "lon": -81.60111111111111,
+   "firBdry": false,
+   "src": "ENR 3.2/3.3 y ENR 6.1A",
+   "notes": [],
+   "routes": [
+    "UM787"
+   ]
+  },
+  "TELAX": {
+   "id": "TELAX",
+   "name": "TELAX",
+   "kind": "WPT",
+   "coord": "145339N 0821644W",
+   "lat": 14.894166666666667,
+   "lon": -82.27888888888889,
+   "firBdry": true,
+   "src": "ENR 3.2/3.3 y ENR 6.1A",
+   "notes": [],
+   "routes": [
+    "UM787"
+   ]
+  },
+  "OGRUL": {
+   "id": "OGRUL",
+   "name": "OGRUL",
+   "kind": "WPT",
+   "coord": "100750N 0781424W",
+   "lat": 10.130555555555556,
+   "lon": -78.24,
+   "firBdry": false,
+   "src": "ENR 3.2/3.3 y ENR 6.1A",
+   "notes": [],
+   "routes": [
+    "UM795"
+   ]
+  },
+  "ENPAN": {
+   "id": "ENPAN",
+   "name": "ENPAN",
+   "kind": "WPT",
+   "coord": "121013N 0782141W",
+   "lat": 12.170277777777777,
+   "lon": -78.36138888888888,
+   "firBdry": false,
+   "src": "ENR 3.2/3.3 y ENR 6.1A",
+   "notes": [],
+   "routes": [
+    "UM795"
+   ]
+  },
+  "ISIMO": {
+   "id": "ISIMO",
+   "name": "ISIMO",
+   "kind": "WPT",
+   "coord": "100943N 0772500W",
+   "lat": 10.161944444444444,
+   "lon": -77.41666666666667,
+   "firBdry": true,
+   "src": "ENR 3.2/3.3 y ENR 6.1A",
+   "notes": [],
+   "routes": [
+    "UM796"
+   ]
+  },
+  "PAKOP": {
+   "id": "PAKOP",
+   "name": "PAKOP",
+   "kind": "WPT",
+   "coord": "100554N 0792930W",
+   "lat": 10.098333333333334,
+   "lon": -79.49166666666667,
+   "firBdry": false,
+   "src": "ENR 3.2/3.3 y ENR 6.1A",
+   "notes": [],
+   "routes": [
+    "UM796"
+   ]
+  },
+  "ALGEN": {
+   "id": "ALGEN",
+   "name": "ALGEN",
+   "kind": "WPT",
+   "coord": "095947N 0810035W",
+   "lat": 9.996388888888887,
+   "lon": -81.00972222222222,
+   "firBdry": false,
+   "src": "ENR 3.2/3.3 y ENR 6.1A",
+   "notes": [],
+   "routes": [
+    "UM796"
+   ]
+  },
+  "PADUR": {
+   "id": "PADUR",
+   "name": "PADUR",
+   "kind": "WPT",
+   "coord": "095843N 0823551W",
+   "lat": 9.97861111111111,
+   "lon": -82.5975,
+   "firBdry": true,
+   "src": "ENR 3.2/3.3 y ENR 6.1A",
+   "notes": [],
+   "routes": [
+    "UM796"
+   ]
+  },
+  "PELRA": {
+   "id": "PELRA",
+   "name": "PELRA",
+   "kind": "WPT",
+   "coord": "141504N 0822700W",
+   "lat": 14.251111111111111,
+   "lon": -82.45,
+   "firBdry": true,
+   "src": "ENR 3.2/3.3 y ENR 6.1A",
+   "notes": [],
+   "compulsory": true,
+   "routes": [
+    "UN420"
+   ]
+  },
+  "MORLI": {
+   "id": "MORLI",
+   "name": "MORLI",
+   "kind": "WPT",
+   "coord": "104104N 0803659W",
+   "lat": 10.684444444444445,
+   "lon": -80.61638888888888,
+   "firBdry": false,
+   "src": "ENR 3.2/3.3 y ENR 6.1A",
+   "notes": [],
+   "routes": [
+    "UN420"
+   ]
+  },
+  "IRATA": {
+   "id": "IRATA",
+   "name": "IRATA",
+   "kind": "WPT",
+   "coord": "072929N 0784805W",
+   "lat": 7.491388888888889,
+   "lon": -78.80138888888888,
+   "firBdry": false,
+   "src": "ENR 3.2/3.3 y ENR 6.1A",
+   "notes": [],
+   "routes": [
+    "UN420"
+   ]
+  },
+  "BUSMO": {
+   "id": "BUSMO",
+   "name": "BUSMO",
+   "kind": "WPT",
+   "coord": "064305N 0781959W",
+   "lat": 6.718055555555556,
+   "lon": -78.33305555555555,
+   "firBdry": true,
+   "src": "ENR 3.2/3.3 y ENR 6.1A",
+   "notes": [],
+   "compulsory": true,
+   "routes": [
+    "UN420"
+   ]
+  },
+  "ARORO": {
+   "id": "ARORO",
+   "name": "ARORO",
+   "kind": "WPT",
+   "coord": "074405N 0772329W",
+   "lat": 7.7347222222222225,
+   "lon": -77.3913888888889,
+   "firBdry": true,
+   "src": "ENR 3.2/3.3 y ENR 6.1A",
+   "notes": [
+    "Discrepancia: ENR 3.3-8 da 0772329W; ENR 4.4-1 da 0772332W. Se usa ENR 3.3. Pendiente de verificar."
+   ],
+   "routes": [
+    "UN653"
+   ]
+  },
+  "MUBMI": {
+   "id": "MUBMI",
+   "name": "MUBMI",
+   "kind": "WPT",
+   "coord": "070626N 0775919W",
+   "lat": 7.107222222222222,
+   "lon": -77.98861111111111,
+   "firBdry": true,
+   "src": "ENR 3.2/3.3 y ENR 6.1A",
+   "notes": [],
+   "routes": [
+    "UP527"
+   ]
+  },
+  "KAKOL": {
+   "id": "KAKOL",
+   "name": "KAKOL",
+   "kind": "WPT",
+   "coord": "083249N 0772454W",
+   "lat": 8.546944444444444,
+   "lon": -77.415,
+   "firBdry": true,
+   "src": "ENR 3.2/3.3 y ENR 6.1A",
+   "notes": [],
+   "routes": [
+    "UP530"
+   ]
+  },
+  "LEVOR": {
+   "id": "LEVOR",
+   "name": "LEVOR",
+   "kind": "WPT",
+   "coord": "150000N 0813515W",
+   "lat": 15.0,
+   "lon": -81.58749999999999,
+   "firBdry": true,
+   "src": "ENR 3.2/3.3 y ENR 6.1A",
+   "notes": [],
+   "compulsory": true,
+   "routes": [
+    "UP536"
+   ]
+  },
+  "SIDAL": {
+   "id": "SIDAL",
+   "name": "SIDAL",
+   "kind": "WPT",
+   "coord": "122832N 0824706W",
+   "lat": 12.475555555555555,
+   "lon": -82.785,
+   "firBdry": true,
+   "src": "ENR 3.2/3.3 y ENR 6.1A",
+   "notes": [],
+   "routes": [
+    "UP543"
+   ]
+  },
+  "MUBAR": {
+   "id": "MUBAR",
+   "name": "MUBAR",
+   "kind": "WPT",
+   "coord": "085117N 0785836W",
+   "lat": 8.854722222222222,
+   "lon": -78.97666666666667,
+   "firBdry": false,
+   "src": "ENR 3.2/3.3 y ENR 6.1A",
+   "notes": [],
+   "routes": [
+    "UP650"
+   ]
+  },
+  "ESEDA": {
+   "id": "ESEDA",
+   "name": "ESEDA",
+   "kind": "WPT",
+   "coord": "090141N 0772459W",
+   "lat": 9.028055555555556,
+   "lon": -77.41638888888889,
+   "firBdry": true,
+   "src": "ENR 3.2/3.3 y ENR 6.1A",
+   "notes": [],
+   "routes": [
+    "UP650"
+   ]
+  },
+  "ALPON": {
+   "id": "ALPON",
+   "name": "ALPON",
+   "kind": "WPT",
+   "coord": "112806N 0772500W",
+   "lat": 11.468333333333334,
+   "lon": -77.41666666666667,
+   "firBdry": true,
+   "src": "ENR 3.2/3.3 y ENR 6.1A",
+   "notes": [],
+   "routes": [
+    "UP671"
+   ]
+  },
+  "KUBEK": {
+   "id": "KUBEK",
+   "name": "KUBEK",
+   "kind": "WPT",
+   "coord": "080132N 0771306W",
+   "lat": 8.025555555555556,
+   "lon": -77.21833333333333,
+   "firBdry": false,
+   "src": "ENR 3.2/3.3 y ENR 6.1A",
+   "notes": [
+    "Fin de UP790. En ENR 3.1 (B510) figura como FIR BDRY; en ENR 3.3 no."
+   ],
+   "routes": [
+    "UP790"
+   ]
+  },
+  "AMUBI": {
+   "id": "AMUBI",
+   "name": "AMUBI",
+   "kind": "WPT",
+   "coord": "113618N 0824307W",
+   "lat": 11.605,
+   "lon": -82.71861111111112,
+   "firBdry": false,
+   "src": "ENR 3.2/3.3 y ENR 6.1A",
+   "notes": [],
+   "routes": [
+    "UP798"
+   ]
+  }
+ },
+ "routes": [
+  {
+   "id": "UA317",
+   "family": "UA",
+   "kind": "Convencional",
+   "src": "ENR 3.2-1 (30 JUN 26, AMDT 02)",
+   "points": [
+    "BUFEO",
+    "BITOR",
+    "TBG"
+   ],
+   "legs": [
+    {
+     "dist": 98.7,
+     "fwd": "112°",
+     "rev": "293°",
+     "note": null
+    },
+    {
+     "dist": 90.1,
+     "fwd": "112°",
+     "rev": "293°",
+     "note": null
+    }
+   ],
+   "lower": "FL195",
+   "upper": "UNL",
+   "cls": "A",
+   "mea": "FL200",
+   "unit": "ACC Panamá",
+   "freqs": [
+    "133.000 Sector Oeste"
+   ],
+   "compulsory": [],
+   "remarks": [
+    "(1) BUFEO: RDL 109° LIO (VOR Limón, fuera del FIR — coordenadas no incluidas)"
+   ],
+   "nav": null,
+   "dirNote": null,
+   "status": null
+  },
+  {
+   "id": "UA502",
+   "family": "UA",
+   "kind": "Convencional",
+   "src": "ENR 3.2-1 (30 JUN 26, AMDT 02)",
+   "points": [
+    "POXON",
+    "DAV",
+    "RONAM",
+    "TBG"
+   ],
+   "legs": [
+    {
+     "dist": 26.1,
+     "fwd": "116°",
+     "rev": "296°",
+     "note": null
+    },
+    {
+     "dist": 86.1,
+     "fwd": "085°",
+     "rev": "267°",
+     "note": null
+    },
+    {
+     "dist": 86.5,
+     "fwd": "087°",
+     "rev": "267°",
+     "note": null
+    }
+   ],
+   "lower": "FL195",
+   "upper": "UNL",
+   "cls": "A",
+   "mea": "FL200",
+   "unit": "ACC Panamá",
+   "freqs": [
+    "133.000 Sector Oeste",
+    "119.700 APP Panamá"
+   ],
+   "compulsory": [],
+   "remarks": [
+    "(1) POXON: RDL 296° DAV DIST 26DME",
+    "(2) RONAM: RDL 267° TBG DIST 87DME"
+   ],
+   "nav": "GNSS OR IRU REQUIRED",
+   "dirNote": null,
+   "status": "Existen SUP A07/26 y A08/26 (AIRAC) sobre UA502/A502 que no se pudieron leer: pendiente de verificar."
+  },
+  {
+   "id": "UA552",
+   "family": "UA",
+   "kind": "Convencional",
+   "src": "ENR 3.2-2 (30 MAR 23, AMDT 01)",
+   "points": [
+    "FALLA",
+    "SPP"
+   ],
+   "legs": [
+    {
+     "dist": 75.9,
+     "fwd": "136°",
+     "rev": "316°",
+     "note": null
+    }
+   ],
+   "lower": "FL195",
+   "upper": "UNL",
+   "cls": "A",
+   "mea": "FL200",
+   "unit": "ACC Panamá",
+   "freqs": [
+    "133.300 Sector Norte"
+   ],
+   "compulsory": [],
+   "remarks": [
+    "(1) FALLA: QDM 136° SPP"
+   ],
+   "nav": null,
+   "dirNote": null,
+   "status": null
+  },
+  {
+   "id": "UG440",
+   "family": "UG",
+   "kind": "Convencional",
+   "src": "ENR 3.2-2 (30 MAR 23, AMDT 01)",
+   "points": [
+    "ISEBA",
+    "BDT",
+    "PUDOS",
+    "TBG"
+   ],
+   "legs": [
+    {
+     "dist": 38.6,
+     "fwd": "110°",
+     "rev": "290°",
+     "note": null
+    },
+    {
+     "dist": 73.0,
+     "fwd": "105°",
+     "rev": "285°",
+     "note": null
+    },
+    {
+     "dist": 90.0,
+     "fwd": "105°",
+     "rev": "285°",
+     "note": null
+    }
+   ],
+   "lower": "FL195",
+   "upper": "UNL",
+   "cls": "A",
+   "mea": "FL200",
+   "unit": "ACC Panamá",
+   "freqs": [
+    "133.3 Sector Norte",
+    "123.3 Sector Sur (así publicado; otras rutas usan 133.850 — pendiente)"
+   ],
+   "compulsory": [],
+   "remarks": [
+    "*Desde BDT a TBG (93/70)",
+    "(1) PUDOS: RDL 285° TBG"
+   ],
+   "nav": null,
+   "dirNote": null,
+   "status": "SUP A43/25: tramos ISEBA–BDT–PUDOS sin guía de derrota por BDT fuera de servicio, hasta 01 OCT 2026. Pendiente verificar si fue prorrogado."
+  },
+  {
+   "id": "UL335",
+   "family": "UL",
+   "kind": "RNAV 5",
+   "src": "ENR 3.3-1 (30 MAR 23, AMDT 01)",
+   "points": [
+    "TBG",
+    "PONPO",
+    "BOGAL"
+   ],
+   "legs": [
+    {
+     "dist": 85.9,
+     "fwd": "075°",
+     "rev": "256°",
+     "note": null
+    },
+    {
+     "dist": 49.7,
+     "fwd": null,
+     "rev": null,
+     "note": "rumbo no publicado en la tabla"
+    }
+   ],
+   "lower": "FL195",
+   "upper": "UNL",
+   "cls": "A",
+   "mea": "FL200",
+   "unit": "ACC Panamá",
+   "freqs": [
+    "125.500 Sector Este"
+   ],
+   "compulsory": [],
+   "remarks": [],
+   "nav": "GNSS OR IRU REQUIRED",
+   "dirNote": null,
+   "status": null
+  },
+  {
+   "id": "UL347",
+   "family": "UL",
+   "kind": "RNAV 5",
+   "src": "ENR 3.3-1 (30 MAR 23, AMDT 01)",
+   "points": [
+    "KASOR",
+    "EKENA",
+    "TIMRO",
+    "TBG"
+   ],
+   "legs": [
+    {
+     "dist": 88.9,
+     "fwd": null,
+     "rev": null,
+     "note": "rumbo no asignable con certeza"
+    },
+    {
+     "dist": 111.1,
+     "fwd": "204°",
+     "rev": "023°",
+     "note": "asignación de rumbo a este tramo pendiente de verificar"
+    },
+    {
+     "dist": 187.1,
+     "fwd": "202°",
+     "rev": "021°",
+     "note": "asignación de rumbo a este tramo pendiente de verificar"
+    }
+   ],
+   "lower": "FL195",
+   "upper": "UNL",
+   "cls": "A",
+   "mea": "FL200",
+   "unit": "ACC Panamá",
+   "freqs": [
+    "133.300 Sector Norte"
+   ],
+   "compulsory": [
+    "TIMRO"
+   ],
+   "remarks": [],
+   "nav": "GNSS OR IRU REQUIRED",
+   "dirNote": null,
+   "status": null
+  },
+  {
+   "id": "UL423",
+   "family": "UL",
+   "kind": "RNAV 5",
+   "src": "ENR 3.3-2 (30 DEC 23, AMDT 04)",
+   "points": [
+    "ILTUR",
+    "URODU",
+    "ISEBA"
+   ],
+   "legs": [
+    {
+     "dist": 33.3,
+     "fwd": "306°",
+     "rev": "126°",
+     "note": null
+    },
+    {
+     "dist": 287.3,
+     "fwd": "306°",
+     "rev": "123°",
+     "note": null
+    }
+   ],
+   "lower": "FL195",
+   "upper": "UNL",
+   "cls": "A",
+   "mea": "FL200",
+   "unit": "ACC Panamá",
+   "freqs": [
+    "133.850 Sector Sur",
+    "133.000 Sector Oeste"
+   ],
+   "compulsory": [
+    "ISEBA"
+   ],
+   "remarks": [],
+   "nav": "GNSS OR IRU REQUIRED",
+   "dirNote": "Bidireccional — verificado en flechas de columna 5 (pág. ENR 3.3-2)",
+   "status": null
+  },
+  {
+   "id": "UL465",
+   "family": "UL",
+   "kind": "RNAV 5",
+   "src": "ENR 3.3-2 (30 DEC 23, AMDT 04)",
+   "points": [
+    "TBG",
+    "SEKMA",
+    "ARNAL"
+   ],
+   "legs": [
+    {
+     "dist": 98.9,
+     "fwd": "356°",
+     "rev": "176°",
+     "note": null
+    },
+    {
+     "dist": 277.4,
+     "fwd": "356°",
+     "rev": "176°",
+     "note": null
+    }
+   ],
+   "lower": "FL195",
+   "upper": "UNL",
+   "cls": "A",
+   "mea": "FL200",
+   "unit": "ACC Panamá",
+   "freqs": [
+    "133.300 Sector Norte"
+   ],
+   "compulsory": [
+    "SEKMA"
+   ],
+   "remarks": [
+    "SUP A17/26 (UPR): ARNAL DCT AMENT DCT OSUPA"
+   ],
+   "nav": "GNSS OR IRU REQUIRED",
+   "dirNote": "Bidireccional — verificado en flechas de columna 5 (pág. ENR 3.3-2)",
+   "status": null
+  },
+  {
+   "id": "UL474",
+   "family": "UL",
+   "kind": "RNAV 5",
+   "src": "ENR 3.3-2 (30 DEC 23, AMDT 04)",
+   "points": [
+    "TBG",
+    "MANBO",
+    "MABNA",
+    "ROKIN"
+   ],
+   "legs": [
+    {
+     "dist": 172.1,
+     "fwd": "040°",
+     "rev": "222°",
+     "note": null
+    },
+    {
+     "dist": 27.9,
+     "fwd": "042°",
+     "rev": "222°",
+     "note": "asignación de rumbo a este tramo pendiente de verificar"
+    },
+    {
+     "dist": 19.4,
+     "fwd": null,
+     "rev": null,
+     "note": "rumbo no publicado en la tabla"
+    }
+   ],
+   "lower": "FL195",
+   "upper": "UNL",
+   "cls": "A",
+   "mea": "FL200",
+   "unit": "ACC Panamá",
+   "freqs": [
+    "133.300 Sector Norte"
+   ],
+   "compulsory": [],
+   "remarks": [],
+   "nav": "GNSS OR IRU REQUIRED",
+   "dirNote": "Bidireccional — verificado en flechas de columna 5 (pág. ENR 3.3-2)",
+   "status": null
+  },
+  {
+   "id": "UL655",
+   "family": "UL",
+   "kind": "RNAV 5",
+   "src": "ENR 3.3-3 (30 DEC 23, AMDT 04)",
+   "points": [
+    "ASEPI",
+    "ASIBO",
+    "EGODI"
+   ],
+   "legs": [
+    {
+     "dist": 24.2,
+     "fwd": "317°",
+     "rev": "137°",
+     "note": null
+    },
+    {
+     "dist": 255.1,
+     "fwd": "317°",
+     "rev": "135°",
+     "note": null
+    }
+   ],
+   "lower": "FL195",
+   "upper": "UNL",
+   "cls": "A",
+   "mea": "FL200",
+   "unit": "ACC Panamá",
+   "freqs": [
+    "133.850 Sector Sur",
+    "133.000 Sector Oeste"
+   ],
+   "compulsory": [],
+   "remarks": [],
+   "nav": "GNSS OR IRU REQUIRED",
+   "dirNote": null,
+   "status": null
+  },
+  {
+   "id": "UL667",
+   "family": "UL",
+   "kind": "RNAV 5",
+   "src": "ENR 3.3-3 (30 DEC 23, AMDT 04)",
+   "points": [
+    "SPP",
+    "DAGAS",
+    "AGUJA"
+   ],
+   "legs": [
+    {
+     "dist": 161.4,
+     "fwd": "115°",
+     "rev": "296°",
+     "note": null
+    },
+    {
+     "dist": 108.4,
+     "fwd": "117°",
+     "rev": "299°",
+     "note": null
+    }
+   ],
+   "lower": "FL195",
+   "upper": "UNL",
+   "cls": "A",
+   "mea": "FL200",
+   "unit": "ACC Panamá",
+   "freqs": [
+    "133.300 Sector Norte",
+    "125.500 Sector Este"
+   ],
+   "compulsory": [],
+   "remarks": [],
+   "nav": "GNSS OR IRU REQUIRED",
+   "dirNote": null,
+   "status": null
+  },
+  {
+   "id": "UL780",
+   "family": "UL",
+   "kind": "RNAV 5",
+   "src": "ENR 3.3-3 (30 DEC 23, AMDT 04)",
+   "points": [
+    "BUXOS",
+    "TORIL",
+    "TBG",
+    "VUNIB",
+    "DAGUD"
+   ],
+   "legs": [
+    {
+     "dist": 126.2,
+     "fwd": "006°",
+     "rev": "186°",
+     "note": null
+    },
+    {
+     "dist": 90.0,
+     "fwd": "006°",
+     "rev": "187°",
+     "note": null
+    },
+    {
+     "dist": 104.0,
+     "fwd": "007°",
+     "rev": "187°",
+     "note": null
+    },
+    {
+     "dist": 267.3,
+     "fwd": "007°",
+     "rev": "188°",
+     "note": null
+    }
+   ],
+   "lower": "FL195",
+   "upper": "UNL",
+   "cls": "A",
+   "mea": "FL200",
+   "unit": "ACC Panamá",
+   "freqs": [
+    "133.300 Sector Norte",
+    "133.850 Sector Sur"
+   ],
+   "compulsory": [],
+   "remarks": [
+    "SUP A17/26 (UPR): DAGUD DCT AMENT DCT OSUPA"
+   ],
+   "nav": "GNSS OR IRU REQUIRED",
+   "dirNote": null,
+   "status": null
+  },
+  {
+   "id": "UM205",
+   "family": "UM",
+   "kind": "RNAV 5",
+   "src": "ENR 3.3-4 (30 MAR 23, AMDT 01)",
+   "points": [
+    "SPP",
+    "TEKUG"
+   ],
+   "legs": [
+    {
+     "dist": 92.5,
+     "fwd": "332°",
+     "rev": "152°",
+     "note": null
+    }
+   ],
+   "lower": "FL195",
+   "upper": "UNL",
+   "cls": "A",
+   "mea": "FL200",
+   "unit": "ACC Panamá",
+   "freqs": [
+    "133.300 Sector Norte"
+   ],
+   "compulsory": [],
+   "remarks": [
+    "Límite inferior impreso \"FT 195\" (errata); se interpreta FL195"
+   ],
+   "nav": "GNSS OR IRU REQUIRED",
+   "dirNote": null,
+   "status": null
+  },
+  {
+   "id": "UM328",
+   "family": "UM",
+   "kind": "RNAV 5",
+   "src": "ENR 3.3-4 (30 MAR 23, AMDT 01)",
+   "points": [
+    "PAPIN",
+    "IRASO"
+   ],
+   "legs": [
+    {
+     "dist": 137.0,
+     "fwd": "148°",
+     "rev": "328°",
+     "note": null
+    }
+   ],
+   "lower": "FL195",
+   "upper": "UNL (no impreso — pendiente)",
+   "cls": "A",
+   "mea": "FL200",
+   "unit": "ACC Panamá",
+   "freqs": [
+    "133.000 Sector Oeste"
+   ],
+   "compulsory": [],
+   "remarks": [
+    "La tabla solo imprime FL195; límite superior UNL asumido por consistencia — pendiente de verificar"
+   ],
+   "nav": "GNSS OR IRU REQUIRED",
+   "dirNote": null,
+   "status": null
+  },
+  {
+   "id": "UM419",
+   "family": "UM",
+   "kind": "RNAV 5",
+   "src": "ENR 3.3-4 (30 MAR 23, AMDT 01)",
+   "points": [
+    "TBG",
+    "AROVI",
+    "ANSON"
+   ],
+   "legs": [
+    {
+     "dist": 90.0,
+     "fwd": "307°",
+     "rev": "127°",
+     "note": null
+    },
+    {
+     "dist": 125.2,
+     "fwd": "307°",
+     "rev": "125°",
+     "note": null
+    }
+   ],
+   "lower": "FL195",
+   "upper": "UNL",
+   "cls": "A",
+   "mea": "FL200",
+   "unit": "ACC Panamá",
+   "freqs": [
+    "133.000 Sector Oeste"
+   ],
+   "compulsory": [],
+   "remarks": [],
+   "nav": "GNSS OR IRU REQUIRED",
+   "dirNote": null,
+   "status": null
+  },
+  {
+   "id": "UM525",
+   "family": "UM",
+   "kind": "RNAV 5",
+   "src": "ENR 3.3-4 (30 MAR 23, AMDT 01)",
+   "points": [
+    "TBG",
+    "SIROT",
+    "BITIX"
+   ],
+   "legs": [
+    {
+     "dist": 78.3,
+     "fwd": "055°",
+     "rev": "236°",
+     "note": null
+    },
+    {
+     "dist": 87.5,
+     "fwd": "056°",
+     "rev": "237°",
+     "note": null
+    }
+   ],
+   "lower": "FL195",
+   "upper": "UNL",
+   "cls": "A",
+   "mea": "FL200",
+   "unit": "ACC Panamá",
+   "freqs": [
+    "125.500 Sector Este"
+   ],
+   "compulsory": [],
+   "remarks": [],
+   "nav": "GNSS OR IRU REQUIRED",
+   "dirNote": null,
+   "status": null
+  },
+  {
+   "id": "UM542",
+   "family": "UM",
+   "kind": "RNAV 5",
+   "src": "ENR 3.3-5 (30 DEC 23, AMDT 04)",
+   "points": [
+    "COLBY",
+    "DAGAS",
+    "REPIT",
+    "TBG",
+    "RODAX",
+    "DABON",
+    "TINPA"
+   ],
+   "legs": [
+    {
+     "dist": 204.1,
+     "fwd": "197°",
+     "rev": "016°",
+     "note": null
+    },
+    {
+     "dist": 73.3,
+     "fwd": "194°",
+     "rev": "013°",
+     "note": null
+    },
+    {
+     "dist": 98.6,
+     "fwd": "195°",
+     "rev": "014°",
+     "note": null
+    },
+    {
+     "dist": 62.5,
+     "fwd": "198°",
+     "rev": "018°",
+     "note": null
+    },
+    {
+     "dist": 82.4,
+     "fwd": "198°",
+     "rev": "017°",
+     "note": null
+    },
+    {
+     "dist": 117.1,
+     "fwd": "197°",
+     "rev": "016°",
+     "note": null
+    }
+   ],
+   "lower": "FL195",
+   "upper": "UNL",
+   "cls": "A",
+   "mea": "FL200",
+   "unit": "ACC Panamá",
+   "freqs": [
+    "133.300 Sector Norte",
+    "133.850 Sector Sur"
+   ],
+   "compulsory": [],
+   "remarks": [],
+   "nav": "GNSS OR IRU REQUIRED",
+   "dirNote": null,
+   "status": null
+  },
+  {
+   "id": "UM549",
+   "family": "UM",
+   "kind": "RNAV 5",
+   "src": "ENR 3.3-5 (30 DEC 23, AMDT 04)",
+   "points": [
+    "SIGUN",
+    "TBG"
+   ],
+   "legs": [
+    {
+     "dist": 132.3,
+     "fwd": "315°",
+     "rev": null,
+     "note": null
+    }
+   ],
+   "lower": "FL195",
+   "upper": "UNL",
+   "cls": "A",
+   "mea": "FL200",
+   "unit": "ACC Panamá",
+   "freqs": [
+    "133.850 Sector Sur"
+   ],
+   "compulsory": [],
+   "remarks": [],
+   "nav": "GNSS OR IRU REQUIRED",
+   "dirNote": "Solo se publica rumbo en un sentido: sentido de operación pendiente de verificar (columna 5)",
+   "status": null
+  },
+  {
+   "id": "UM597",
+   "family": "UM",
+   "kind": "RNAV 5",
+   "src": "ENR 3.3-5 (30 DEC 23, AMDT 04)",
+   "points": [
+    "TBG",
+    "AGUJA"
+   ],
+   "legs": [
+    {
+     "dist": 182.6,
+     "fwd": "049°",
+     "rev": "231°",
+     "note": null
+    }
+   ],
+   "lower": "FL195",
+   "upper": "UNL",
+   "cls": "A",
+   "mea": "FL200",
+   "unit": "ACC Panamá",
+   "freqs": [
+    "125.500 Sector Este"
+   ],
+   "compulsory": [],
+   "remarks": [],
+   "nav": "GNSS OR IRU REQUIRED",
+   "dirNote": null,
+   "status": null
+  },
+  {
+   "id": "UM659",
+   "family": "UM",
+   "kind": "RNAV 5",
+   "src": "ENR 3.3-6 (30 MAR 23, AMDT 01)",
+   "points": [
+    "OGLUT",
+    "LESIR"
+   ],
+   "legs": [
+    {
+     "dist": 87.4,
+     "fwd": "342°",
+     "rev": "162°",
+     "note": null
+    }
+   ],
+   "lower": "FL195",
+   "upper": "UNL",
+   "cls": "A",
+   "mea": "FL200",
+   "unit": "ACC Panamá",
+   "freqs": [
+    "133.000 Sector Oeste"
+   ],
+   "compulsory": [],
+   "remarks": [],
+   "nav": "GNSS OR IRU REQUIRED",
+   "dirNote": null,
+   "status": null
+  },
+  {
+   "id": "UM674",
+   "family": "UM",
+   "kind": "RNAV 5",
+   "src": "ENR 3.3-6 (30 MAR 23, AMDT 01)",
+   "points": [
+    "TBG",
+    "MILAT",
+    "TOKUT"
+   ],
+   "legs": [
+    {
+     "dist": 89.5,
+     "fwd": "178°",
+     "rev": "358°",
+     "note": null
+    },
+    {
+     "dist": 81.8,
+     "fwd": null,
+     "rev": null,
+     "note": "rumbo no publicado en la tabla"
+    }
+   ],
+   "lower": "FL195",
+   "upper": "UNL",
+   "cls": "A",
+   "mea": "FL200",
+   "unit": "ACC Panamá",
+   "freqs": [
+    "133.850 Sector Sur"
+   ],
+   "compulsory": [
+    "MILAT"
+   ],
+   "remarks": [],
+   "nav": "GNSS OR IRU REQUIRED",
+   "dirNote": null,
+   "status": null
+  },
+  {
+   "id": "UM782",
+   "family": "UM",
+   "kind": "RNAV 5",
+   "src": "ENR 3.3-6 (30 MAR 23, AMDT 01)",
+   "points": [
+    "ARNAL",
+    "LONET",
+    "AGUJA"
+   ],
+   "legs": [
+    {
+     "dist": 122.7,
+     "fwd": "147°",
+     "rev": "328°",
+     "note": null
+    },
+    {
+     "dist": 181.6,
+     "fwd": "148°",
+     "rev": "329°",
+     "note": null
+    }
+   ],
+   "lower": "FL195",
+   "upper": "UNL",
+   "cls": "A",
+   "mea": "FL200",
+   "unit": "ACC Panamá",
+   "freqs": [
+    "133.300 Sector Norte",
+    "125.500 Sector Este"
+   ],
+   "compulsory": [
+    "ARNAL",
+    "AGUJA"
+   ],
+   "remarks": [],
+   "nav": "GNSS OR IRU REQUIRED",
+   "dirNote": null,
+   "status": null
+  },
+  {
+   "id": "UM787",
+   "family": "UM",
+   "kind": "RNAV 5",
+   "src": "ENR 3.3-6 (30 MAR 23, AMDT 01)",
+   "points": [
+    "ROPOL",
+    "NELUR",
+    "KIKOL",
+    "TELAX"
+   ],
+   "legs": [
+    {
+     "dist": 112.2,
+     "fwd": "293°",
+     "rev": "111°",
+     "note": null
+    },
+    {
+     "dist": 140.2,
+     "fwd": "291°",
+     "rev": "109°",
+     "note": null
+    },
+    {
+     "dist": 40.7,
+     "fwd": "289°",
+     "rev": "109°",
+     "note": null
+    }
+   ],
+   "lower": "FL195",
+   "upper": "UNL",
+   "cls": "A",
+   "mea": "FL200",
+   "unit": "ACC Panamá",
+   "freqs": [
+    "133.300 Sector Norte"
+   ],
+   "compulsory": [],
+   "remarks": [],
+   "nav": "GNSS OR IRU REQUIRED",
+   "dirNote": null,
+   "status": null
+  },
+  {
+   "id": "UM795",
+   "family": "UM",
+   "kind": "RNAV 5",
+   "src": "ENR 3.3-7 (30 MAR 23, AMDT 01)",
+   "points": [
+    "ILTUR",
+    "PML",
+    "OGRUL",
+    "ENPAN",
+    "COLBY"
+   ],
+   "legs": [
+    {
+     "dist": 94.0,
+     "fwd": "008°",
+     "rev": "189°",
+     "note": null
+    },
+    {
+     "dist": 103.2,
+     "fwd": null,
+     "rev": null,
+     "note": "rumbo no publicado en la tabla"
+    },
+    {
+     "dist": 122.0,
+     "fwd": "003°",
+     "rev": "183°",
+     "note": "asignación de rumbo a este tramo pendiente de verificar"
+    },
+    {
+     "dist": 169.3,
+     "fwd": null,
+     "rev": null,
+     "note": "rumbo no publicado en la tabla"
+    }
+   ],
+   "lower": "FL195",
+   "upper": "UNL",
+   "cls": "A",
+   "mea": "FL200",
+   "unit": "ACC Panamá",
+   "freqs": [
+    "133.300 Sector Norte",
+    "133.850 Sector Sur",
+    "125.500 Sector Este"
+   ],
+   "compulsory": [
+    "COLBY"
+   ],
+   "remarks": [
+    "Cruce UM796",
+    "Cruce UM782"
+   ],
+   "nav": "GNSS OR IRU REQUIRED",
+   "dirNote": null,
+   "status": null
+  },
+  {
+   "id": "UM796",
+   "family": "UM",
+   "kind": "RNAV 5",
+   "src": "ENR 3.3-7 (30 MAR 23, AMDT 01)",
+   "points": [
+    "ISIMO",
+    "PAKOP",
+    "ALGEN",
+    "PADUR"
+   ],
+   "legs": [
+    {
+     "dist": 122.9,
+     "fwd": "275°",
+     "rev": "093°",
+     "note": null
+    },
+    {
+     "dist": 90.1,
+     "fwd": "272°",
+     "rev": "090°",
+     "note": null
+    },
+    {
+     "dist": 93.7,
+     "fwd": "274°",
+     "rev": "093°",
+     "note": null
+    }
+   ],
+   "lower": "FL195",
+   "upper": "UNL",
+   "cls": "A",
+   "mea": "FL200",
+   "unit": "ACC Panamá",
+   "freqs": [
+    "133.300 Sector Norte",
+    "125.500 Sector Este",
+    "133.000 Sector Oeste"
+   ],
+   "compulsory": [],
+   "remarks": [],
+   "nav": "GNSS OR IRU REQUIRED",
+   "dirNote": null,
+   "status": null
+  },
+  {
+   "id": "UN420",
+   "family": "UN",
+   "kind": "RNAV 5",
+   "src": "ENR 3.3-8 (30 MAR 23, AMDT 01)",
+   "points": [
+    "PELRA",
+    "SPP",
+    "MORLI",
+    "TBG",
+    "IRATA",
+    "BUSMO"
+   ],
+   "legs": [
+    {
+     "dist": 108.8,
+     "fwd": "160°",
+     "rev": "341°",
+     "note": null
+    },
+    {
+     "dist": 130.2,
+     "fwd": "155°",
+     "rev": "335°",
+     "note": null
+    },
+    {
+     "dist": 129.4,
+     "fwd": "156°",
+     "rev": "336°",
+     "note": null
+    },
+    {
+     "dist": 89.7,
+     "fwd": "155°",
+     "rev": "335°",
+     "note": null
+    },
+    {
+     "dist": 54.0,
+     "fwd": "154°",
+     "rev": "334°",
+     "note": null
+    }
+   ],
+   "lower": "FL195",
+   "upper": "UNL",
+   "cls": "A",
+   "mea": "FL200",
+   "unit": "ACC Panamá",
+   "freqs": [
+    "133.300 Sector Norte",
+    "133.850 Sector Sur"
+   ],
+   "compulsory": [
+    "PELRA",
+    "BUSMO"
+   ],
+   "remarks": [],
+   "nav": "GNSS OR IRU REQUIRED",
+   "dirNote": null,
+   "status": null
+  },
+  {
+   "id": "UN653",
+   "family": "UN",
+   "kind": "RNAV 5",
+   "src": "ENR 3.3-8 (30 MAR 23, AMDT 01)",
+   "points": [
+    "ARORO",
+    "PML",
+    "SEKMA",
+    "SPP"
+   ],
+   "legs": [
+    {
+     "dist": 59.9,
+     "fwd": "318°",
+     "rev": null,
+     "note": null
+    },
+    {
+     "dist": 157.0,
+     "fwd": "326°",
+     "rev": null,
+     "note": null
+    },
+    {
+     "dist": 169.6,
+     "fwd": "325°",
+     "rev": null,
+     "note": null
+    }
+   ],
+   "lower": "FL195",
+   "upper": "UNL",
+   "cls": "A",
+   "mea": "FL200",
+   "unit": "ACC Panamá",
+   "freqs": [
+    "133.300 Sector Norte",
+    "125.500 Sector Este"
+   ],
+   "compulsory": [],
+   "remarks": [],
+   "nav": "GNSS OR IRU REQUIRED",
+   "dirNote": "Solo se publica rumbo en un sentido: sentido de operación pendiente de verificar (columna 5)",
+   "status": null
+  },
+  {
+   "id": "UP401",
+   "family": "UP",
+   "kind": "RNAV 5",
+   "src": "ENR 3.3-8 (30 MAR 23, AMDT 01)",
+   "points": [
+    "ANSON",
+    "SPP"
+   ],
+   "legs": [
+    {
+     "dist": 124.7,
+     "fwd": "030°",
+     "rev": "211°",
+     "note": null
+    }
+   ],
+   "lower": "FL195",
+   "upper": "UNL",
+   "cls": "A",
+   "mea": "FL200",
+   "unit": "ACC Panamá",
+   "freqs": [
+    "133.300 Sector Norte",
+    "133.000 Sector Oeste"
+   ],
+   "compulsory": [],
+   "remarks": [],
+   "nav": "GNSS OR IRU REQUIRED",
+   "dirNote": null,
+   "status": null
+  },
+  {
+   "id": "UP527",
+   "family": "UP",
+   "kind": "RNAV 5",
+   "src": "ENR 3.3-9 (30 DEC 23, AMDT 04)",
+   "points": [
+    "TBG",
+    "MUBMI"
+   ],
+   "legs": [
+    {
+     "dist": 137.3,
+     "fwd": "142°",
+     "rev": null,
+     "note": null
+    }
+   ],
+   "lower": "FL195",
+   "upper": "UNL",
+   "cls": "A",
+   "mea": "FL200",
+   "unit": "ACC Panamá",
+   "freqs": [
+    "133.850 Sector Sur"
+   ],
+   "compulsory": [],
+   "remarks": [],
+   "nav": "GNSS OR IRU REQUIRED",
+   "dirNote": "Solo se publica rumbo en un sentido: sentido de operación pendiente de verificar (columna 5)",
+   "status": null
+  },
+  {
+   "id": "UP530",
+   "family": "UP",
+   "kind": "RNAV 5",
+   "src": "ENR 3.3-9 (30 DEC 23, AMDT 04)",
+   "points": [
+    "SPP",
+    "VUNIB",
+    "PONPO",
+    "KAKOL"
+   ],
+   "legs": [
+    {
+     "dist": 178.6,
+     "fwd": "137°",
+     "rev": null,
+     "note": null
+    },
+    {
+     "dist": 107.6,
+     "fwd": "140°",
+     "rev": null,
+     "note": null
+    },
+    {
+     "dist": 63.5,
+     "fwd": "139°",
+     "rev": null,
+     "note": null
+    }
+   ],
+   "lower": "FL195",
+   "upper": "UNL",
+   "cls": "A",
+   "mea": "FL200",
+   "unit": "ACC Panamá",
+   "freqs": [
+    "133.300 Sector Norte",
+    "125.500 Sector Este"
+   ],
+   "compulsory": [],
+   "remarks": [],
+   "nav": "GNSS OR IRU REQUIRED",
+   "dirNote": "Solo se publica rumbo en un sentido: sentido de operación pendiente de verificar (columna 5)",
+   "status": null
+  },
+  {
+   "id": "UP536",
+   "family": "UP",
+   "kind": "RNAV 5",
+   "src": "ENR 3.3-9 (30 DEC 23, AMDT 04)",
+   "points": [
+    "LEVOR",
+    "SPP"
+   ],
+   "legs": [
+    {
+     "dist": 144.6,
+     "fwd": "187°",
+     "rev": "007°",
+     "note": null
+    }
+   ],
+   "lower": "FL195",
+   "upper": "UNL",
+   "cls": "A",
+   "mea": "FL200",
+   "unit": "ACC Panamá",
+   "freqs": [
+    "133.300 Sector Norte"
+   ],
+   "compulsory": [
+    "LEVOR"
+   ],
+   "remarks": [],
+   "nav": "GNSS OR IRU REQUIRED",
+   "dirNote": null,
+   "status": null
+  },
+  {
+   "id": "UP543",
+   "family": "UP",
+   "kind": "RNAV 5",
+   "src": "ENR 3.3-9 (30 DEC 23, AMDT 04)",
+   "points": [
+    "SIDAL",
+    "SPP"
+   ],
+   "legs": [
+    {
+     "dist": 63.7,
+     "fwd": "088°",
+     "rev": "269°",
+     "note": null
+    }
+   ],
+   "lower": "FL195",
+   "upper": "UNL",
+   "cls": "A",
+   "mea": "FL200",
+   "unit": "ACC Panamá",
+   "freqs": [
+    "133.300 Sector Norte"
+   ],
+   "compulsory": [],
+   "remarks": [],
+   "nav": "GNSS OR IRU REQUIRED",
+   "dirNote": null,
+   "status": null
+  },
+  {
+   "id": "UP650",
+   "family": "UP",
+   "kind": "RNAV 5",
+   "src": "ENR 3.3-10 (30 MAR 23, AMDT 01)",
+   "points": [
+    "TBG",
+    "MUBAR",
+    "ESEDA"
+   ],
+   "legs": [
+    {
+     "dist": 35.0,
+     "fwd": "088°",
+     "rev": "269°",
+     "note": null
+    },
+    {
+     "dist": 93.2,
+     "fwd": "089°",
+     "rev": "270°",
+     "note": null
+    }
+   ],
+   "lower": "FL195",
+   "upper": "UNL",
+   "cls": "A",
+   "mea": "FL200",
+   "unit": "ACC Panamá",
+   "freqs": [
+    "125.500 Sector Este"
+   ],
+   "compulsory": [],
+   "remarks": [],
+   "nav": "GNSS OR IRU REQUIRED",
+   "dirNote": null,
+   "status": null
+  },
+  {
+   "id": "UP671",
+   "family": "UP",
+   "kind": "RNAV 5",
+   "src": "ENR 3.3-10 (30 MAR 23, AMDT 01)",
+   "points": [
+    "SPP",
+    "TIMRO",
+    "ALPON"
+   ],
+   "legs": [
+    {
+     "dist": 182.7,
+     "fwd": "109°",
+     "rev": "291°",
+     "note": null
+    },
+    {
+     "dist": 78.1,
+     "fwd": "111°",
+     "rev": "292°",
+     "note": null
+    }
+   ],
+   "lower": "FL195",
+   "upper": "UNL",
+   "cls": "A",
+   "mea": "FL200",
+   "unit": "ACC Panamá",
+   "freqs": [
+    "133.300 Sector Norte"
+   ],
+   "compulsory": [
+    "TIMRO"
+   ],
+   "remarks": [],
+   "nav": "GNSS OR IRU REQUIRED",
+   "dirNote": null,
+   "status": null
+  },
+  {
+   "id": "UP790",
+   "family": "UP",
+   "kind": "RNAV 5",
+   "src": "ENR 3.3-10 (30 MAR 23, AMDT 01)",
+   "points": [
+    "TBG",
+    "KUBEK"
+   ],
+   "legs": [
+    {
+     "dist": 146.6,
+     "fwd": "113°",
+     "rev": "295°",
+     "note": null
+    }
+   ],
+   "lower": "FL195",
+   "upper": "UNL",
+   "cls": "A",
+   "mea": "FL200",
+   "unit": "ACC Panamá",
+   "freqs": [
+    "125.500 Sector Este"
+   ],
+   "compulsory": [],
+   "remarks": [],
+   "nav": "GNSS OR IRU REQUIRED",
+   "dirNote": null,
+   "status": null
+  },
+  {
+   "id": "UP798",
+   "family": "UP",
+   "kind": "RNAV 5",
+   "src": "ENR 3.3-10 (30 MAR 23, AMDT 01)",
+   "points": [
+    "AMUBI",
+    "SPP"
+   ],
+   "legs": [
+    {
+     "dist": 83.4,
+     "fwd": "049°",
+     "rev": "230°",
+     "note": null
+    }
+   ],
+   "lower": "FL195",
+   "upper": "UNL",
+   "cls": "A",
+   "mea": "FL200",
+   "unit": "ACC Panamá",
+   "freqs": [
+    "133.300 Sector Norte"
+   ],
+   "compulsory": [],
+   "remarks": [],
+   "nav": "GNSS OR IRU REQUIRED",
+   "dirNote": null,
+   "status": null
+  }
+ ],
+ "meta": {
+  "titulo": "FIR Panamá (MPZL) — Rutas ATS superiores",
+  "fuentes": [
+   [
+    "ENR 3.2 Rutas ATS superiores",
+    "ENR 3.2-1: 30 JUN 26 (AMDT 02) · ENR 3.2-2: 30 MAR 23 (AMDT 01)"
+   ],
+   [
+    "ENR 3.3 Rutas RNAV superiores",
+    "Págs. 3.3-1/4/6/7/8/10: 30 MAR 23 (AMDT 01) · 3.3-2/3/5/9: 30 DEC 23 (AMDT 04)"
+   ],
+   [
+    "ENR 4.1 Radioayudas en ruta",
+    "4.1-1: 30 DEC 25 · 4.1-2/4: 30 DEC 18 · 4.1-3: 30 JUN 25"
+   ],
+   [
+    "ENR 4.4 Puntos significativos",
+    "30 MAR 25 / 30 SEP 25 (contraste de coordenadas)"
+   ],
+   [
+    "ENR 6.1A Carta de navegación en ruta (ERC)",
+    "30 JUN 26 (AMDT 02) · info aeronáutica 02 APR 26"
+   ],
+   [
+    "SUP A42/25, SUP A43/25, SUP A17/26",
+    "Estado de BDT / UG440 y rutas UPR"
+   ]
+  ],
+  "airac": "Fecha de referencia de los datos: páginas AIP más recientes usadas = 30 JUN 26 (AMDT 02). Consultado el 28 OCT 2026 en aeronautica.gob.pa (AIS Panamá). Existe AMDT AIRAC 11-26: verificar páginas ENR 3.2/3.3 antes de uso operacional.",
+  "pendientes": [
+   "Sentido de operación (columna 5): las flechas solo se pudieron leer en ENR 3.3-2 (UL423, UL465, UL474). En el resto, \"bidireccional\" se infiere de que el AIP publica rumbo en ambos sentidos.",
+   "Rutas con rumbo publicado en un solo sentido (UM549, UN653, UP527, UP530): sentido de operación pendiente de verificar.",
+   "Rumbos MAG no publicados o de asignación ambigua a tramo: UL335 PONPO–BOGAL; UL347 (sus 3 tramos); UL474 MANBO–MABNA y MABNA–ROKIN; UM674 MILAT–TOKUT; UM795 PML–OGRUL, OGRUL–ENPAN, ENPAN–COLBY.",
+   "Paridad de niveles (impares/pares) derivada de la regla semicircular sobre el rumbo MAG publicado; no leída directamente de la tabla.",
+   "UM328: la tabla solo imprime FL195; límite superior (UNL) no impreso.",
+   "UM205: límite inferior impreso \"FT 195\" (errata), interpretado como FL195.",
+   "UG440: frecuencia \"123.3 Sector Sur\" tal como está publicada (las demás rutas usan 133.850).",
+   "BDT VOR/DME y UG440: SUP A42/25 y A43/25 (fuera de servicio / sin guía de derrota) vencían el 01 OCT 2026; no se pudo confirmar si fueron prorrogados.",
+   "UA502: existen SUP A07/26 y A08/26 (AIRAC) sobre UA502/A502 que no se pudieron descargar.",
+   "Coordenadas discrepantes entre secciones: POXON (ENR 3.2 083319N 0825033W vs ENR 4.4 083311N 0825006W) y ARORO (0772329W vs 0772332W). Se usa ENR 3.2/3.3.",
+   "Contorno FIR: puntos FIR BDRY del AIP Panamá + vértices publicados en el AIP Colombia ENR 2.1 (límites con FIR Barranquilla y Bogotá). La esquina NW (15°N 082°12'W) se leyó en la ERC. El ENR 2.1 de Panamá no se pudo descargar.",
+   "FIR adyacentes: Kingston y Centroamericana dibujadas solo a partir del límite común con Panamá; sus límites propios (AIP Jamaica / COCESNA) no se consultaron, ni sus frecuencias ACC.",
+   "SAN ANDRÉS (SPP) es radioayuda de Colombia: frecuencia/canal/coordenadas de la ERC; variación magnética no publicada en el AIP Panamá.",
+   "VOR LIO (Limón, Costa Rica) citado en UA317: no incluido (coordenadas fuera de la fuente).",
+   "Costas y fronteras: Natural Earth 1:50 m, solo como referencia visual (no aeronáutica)."
+  ],
+  "fueraAlcance": "No incluidas por no ser rutas superiores: ENR 3.1 (A/B/G/R inferiores), rutas RNAV Q nacionales (ENR 3.3-11 a 3-15), ENR 3.5 (V) y el espacio SDR de ENR 3.7 (FL300–UNL)."
+ },
+ "firBoundary": [
+  {
+   "lat": 15.0,
+   "lon": -82.2,
+   "name": "esquina NW (leída en ERC, aprox.)"
+  },
+  "LEVOR",
+  "ARNAL",
+  "DAGUD",
+  "COLBY",
+  "KASOR",
+  {
+   "lat": 15.0,
+   "lon": -77.416667,
+   "name": "15°N 077°25'W (esquina NE)"
+  },
+  "ROPOL",
+  "ROKIN",
+  "ALPON",
+  "AGUJA",
+  "BITIX",
+  "ISIMO",
+  "ESEDA",
+  {
+   "lat": 8.580556,
+   "lon": -77.416667,
+   "name": "083450N 0772500W · unión Barranquilla/Bogotá (AIP Colombia ENR 2.1 (28 NOV 24, AIRAC AMDT 67/24))"
+  },
+  "KAKOL",
+  "KUBEK",
+  "ARORO",
+  "SIGUN",
+  {
+   "lat": 7.247222,
+   "lon": -77.88,
+   "name": "071450N 0775248W (AIP Colombia ENR 2.1 (28 NOV 24, AIRAC AMDT 67/24))"
+  },
+  "MUBMI",
+  "ILTUR",
+  {
+   "lat": 6.730556,
+   "lon": -78.296667,
+   "name": "064350N 0781748W (AIP Colombia ENR 2.1 (28 NOV 24, AIRAC AMDT 67/24))"
+  },
+  "BUSMO",
+  {
+   "lat": 6.463889,
+   "lon": -78.78,
+   "name": "062750N 0784648W (AIP Colombia ENR 2.1 (28 NOV 24, AIRAC AMDT 67/24))"
+  },
+  {
+   "lat": 6.263889,
+   "lon": -79.046667,
+   "name": "061550N 0790248W (AIP Colombia ENR 2.1 (28 NOV 24, AIRAC AMDT 67/24))"
+  },
+  "TOKUT",
+  "ASEPI",
+  "BUXOS",
+  {
+   "lat": 4.497222,
+   "lon": -79.996667,
+   "name": "042950N 0795948W (AIP Colombia ENR 2.1 (28 NOV 24, AIRAC AMDT 67/24))"
+  },
+  "TINPA",
+  "IRASO",
+  "OGLUT",
+  {
+   "lat": 4.530556,
+   "lon": -82.916389,
+   "name": "043150N 0825459W (AIP Colombia ENR 2.1 (28 NOV 24, AIRAC AMDT 67/24))"
+  },
+  "LESIR",
+  "PAPIN",
+  "POXON",
+  "EGODI",
+  "ISEBA",
+  "BUFEO",
+  "PADUR",
+  "ANSON",
+  "SIDAL",
+  "FALLA",
+  "TEKUG",
+  "PELRA",
+  "TELAX"
+ ],
+ "adjacentFirs": [
+  {
+   "id": "MKJK",
+   "name": "FIR Kingston",
+   "short": "KINGSTON",
+   "country": "Jamaica",
+   "color": "#e879f9",
+   "unit": "ACC Kingston",
+   "freqs": [
+    "pendiente de verificar (AIP Jamaica no consultado)"
+   ],
+   "border": [
+    {
+     "lat": 15.0,
+     "lon": -82.2,
+     "name": "esquina NW (leída en ERC, aprox.)"
+    },
+    "LEVOR",
+    "ARNAL",
+    "DAGUD",
+    "COLBY",
+    "KASOR",
+    {
+     "lat": 15.0,
+     "lon": -77.416667,
+     "name": "15°N 077°25'W (esquina NE)"
+    }
+   ],
+   "label": {
+    "lat": 15.75,
+    "lon": -79.9
+   },
+   "outer": [
+    {
+     "lat": 15,
+     "lon": -73.5
+    },
+    {
+     "lat": 16.5,
+     "lon": -73.5
+    },
+    {
+     "lat": 16.5,
+     "lon": -82.2
+    }
+   ],
+   "src": "Límite común 15°N: puntos FIR BDRY del AIP Panamá (ENR 3.3) y ERC ENR 6.1A. Límite N de FIR Barranquilla en 15°N (AIP Colombia ENR 2.1 (28 NOV 24, AIRAC AMDT 67/24)).",
+   "notes": [
+    "El límite oeste de Kingston con la FIR Centroamericana (al norte de 15°N) no se verificó: el sombreado usa 082°12'W solo como referencia."
+   ]
+  },
+  {
+   "id": "SKEC",
+   "name": "FIR Barranquilla",
+   "short": "BARRANQUILLA",
+   "country": "Colombia",
+   "color": "#f59e0b",
+   "unit": "ACC Barranquilla",
+   "freqs": [
+    "Norte 128.10 MHz (alt. 128.40)",
+    "Sur 124.20 MHz"
+   ],
+   "border": [
+    {
+     "lat": 15.0,
+     "lon": -77.416667,
+     "name": "15°N 077°25'W (esquina NE)"
+    },
+    "ROPOL",
+    "ROKIN",
+    "ALPON",
+    "AGUJA",
+    "BITIX",
+    "ISIMO",
+    "ESEDA",
+    {
+     "lat": 8.580556,
+     "lon": -77.416667,
+     "name": "083450N 0772500W · unión Barranquilla/Bogotá (AIP Colombia ENR 2.1 (28 NOV 24, AIRAC AMDT 67/24))"
+    }
+   ],
+   "label": {
+    "lat": 11.4,
+    "lon": -75.6
+   },
+   "outer": [
+    {
+     "lat": 8.248,
+     "lon": -73.5
+    },
+    {
+     "lat": 13.979,
+     "lon": -73.5
+    },
+    {
+     "lat": 14.331,
+     "lon": -73.996
+    },
+    {
+     "lat": 15,
+     "lon": -73.996
+    }
+   ],
+   "innerJoin": [
+    {
+     "lat": 7.6306,
+     "lon": -74.8633
+    }
+   ],
+   "src": "AIP Colombia ENR 2.1 (28 NOV 24, AIRAC AMDT 67/24): límite 15°N 077°25'W → 083450N 0772500W (meridiano 077°25'W) y límite con FIR Bogotá 083450N 0772500W – 073750N 0745148W – 083750N 0723917W.",
+   "notes": []
+  },
+  {
+   "id": "SKED",
+   "name": "FIR Bogotá",
+   "short": "BOGOTÁ",
+   "country": "Colombia",
+   "color": "#f43f5e",
+   "unit": "ACC Bogotá",
+   "freqs": [
+    "NW 123.70 MHz (alt. 123.85)",
+    "SW 125.10 MHz (alt. 125.95)",
+    "NE 128.00 MHz · SE 128.80 MHz"
+   ],
+   "border": [
+    {
+     "lat": 8.580556,
+     "lon": -77.416667,
+     "name": "083450N 0772500W · unión Barranquilla/Bogotá (AIP Colombia ENR 2.1 (28 NOV 24, AIRAC AMDT 67/24))"
+    },
+    "KAKOL",
+    "KUBEK",
+    "ARORO",
+    "SIGUN",
+    {
+     "lat": 7.247222,
+     "lon": -77.88,
+     "name": "071450N 0775248W (AIP Colombia ENR 2.1 (28 NOV 24, AIRAC AMDT 67/24))"
+    },
+    "MUBMI",
+    "ILTUR",
+    {
+     "lat": 6.730556,
+     "lon": -78.296667,
+     "name": "064350N 0781748W (AIP Colombia ENR 2.1 (28 NOV 24, AIRAC AMDT 67/24))"
+    },
+    "BUSMO",
+    {
+     "lat": 6.463889,
+     "lon": -78.78,
+     "name": "062750N 0784648W (AIP Colombia ENR 2.1 (28 NOV 24, AIRAC AMDT 67/24))"
+    },
+    {
+     "lat": 6.263889,
+     "lon": -79.046667,
+     "name": "061550N 0790248W (AIP Colombia ENR 2.1 (28 NOV 24, AIRAC AMDT 67/24))"
+    },
+    "TOKUT",
+    "ASEPI",
+    "BUXOS",
+    {
+     "lat": 4.497222,
+     "lon": -79.996667,
+     "name": "042950N 0795948W (AIP Colombia ENR 2.1 (28 NOV 24, AIRAC AMDT 67/24))"
+    },
+    "TINPA",
+    "IRASO",
+    "OGLUT",
+    {
+     "lat": 4.530556,
+     "lon": -82.916389,
+     "name": "043150N 0825459W (AIP Colombia ENR 2.1 (28 NOV 24, AIRAC AMDT 67/24))"
+    }
+   ],
+   "label": {
+    "lat": 5.4,
+    "lon": -77.6
+   },
+   "outer": [
+    {
+     "lat": 2.5,
+     "lon": -82.9164
+    },
+    {
+     "lat": 2.5,
+     "lon": -73.5
+    },
+    {
+     "lat": 8.248,
+     "lon": -73.5
+    },
+    {
+     "lat": 7.8789,
+     "lon": -74.3183
+    },
+    {
+     "lat": 7.6306,
+     "lon": -74.8633
+    }
+   ],
+   "src": "AIP Colombia ENR 2.1 (28 NOV 24, AIRAC AMDT 67/24): 083450N 0772500W … 071450N 0775248W – 064350N 0781748W – 062750N 0784648W – 061550N 0790248W – 042950N 0795948W – 043150N 0825459W – 012450N 0825459W.",
+   "notes": [
+    "Entre 083450N 0772500W y 071450N 0775248W el AIP Colombia une los puntos en línea recta; aquí se siguen los puntos FIR BDRY del AIP Panamá (KAKOL, KUBEK, ARORO, SIGUN), que siguen la frontera terrestre."
+   ]
+  },
+  {
+   "id": "MHTG",
+   "name": "FIR Centroamericana (CENAMER)",
+   "short": "CENTROAMERICANA",
+   "country": "COCESNA",
+   "color": "#2dd4bf",
+   "unit": "ACC Centroamericano (COCESNA)",
+   "freqs": [
+    "pendiente de verificar (AIP COCESNA no consultado)"
+   ],
+   "border": [
+    {
+     "lat": 4.530556,
+     "lon": -82.916389,
+     "name": "043150N 0825459W (AIP Colombia ENR 2.1 (28 NOV 24, AIRAC AMDT 67/24))"
+    },
+    "LESIR",
+    "PAPIN",
+    "POXON",
+    "EGODI",
+    "ISEBA",
+    "BUFEO",
+    "PADUR",
+    "ANSON",
+    "SIDAL",
+    "FALLA",
+    "TEKUG",
+    "PELRA",
+    "TELAX",
+    {
+     "lat": 15.0,
+     "lon": -82.2,
+     "name": "esquina NW (leída en ERC, aprox.)"
+    }
+   ],
+   "label": {
+    "lat": 10.6,
+    "lon": -84.9
+   },
+   "outer": [
+    {
+     "lat": 16.5,
+     "lon": -82.2
+    },
+    {
+     "lat": 16.5,
+     "lon": -86.5
+    },
+    {
+     "lat": 2.5,
+     "lon": -86.5
+    },
+    {
+     "lat": 2.5,
+     "lon": -82.9164
+    }
+   ],
+   "src": "Límite oeste del FIR Panamá: puntos FIR BDRY del AIP Panamá (ENR 3.2/3.3) y ERC ENR 6.1A. Al sur de 043150N el límite FIR Bogotá sigue 082°55'W (AIP Colombia ENR 2.1 (28 NOV 24, AIRAC AMDT 67/24)).",
+   "notes": [
+    "Límites propios de la FIR Centroamericana no consultados; el sombreado hacia el oeste es solo referencia visual.",
+    "El TMA San Andrés (SPP) está dentro del FIR Panamá según la ERC."
+   ]
+  }
+ ]
+}
+</script>
+<script type="application/json" id="geo-ref">{"borders": [[[-77.374, 8.658], [-77.392, 8.644], [-77.449, 8.566], [-77.478, 8.498], [-77.406, 8.427], [-77.385, 8.351], [-77.345, 8.269], [-77.284, 8.188], [-77.212, 8.033], [-77.197, 7.972], [-77.215, 7.932], [-77.284, 7.908], [-77.345, 7.837], [-77.363, 7.748], [-77.352, 7.705], [-77.539, 7.566], [-77.586, 7.544], [-77.619, 7.564], [-77.658, 7.634], [-77.705, 7.691], [-77.734, 7.71], [-77.748, 7.712], [-77.763, 7.698], [-77.77, 7.669], [-77.745, 7.537], [-77.766, 7.485], [-77.827, 7.443], [-77.899, 7.229]], [[-82.878, 8.071], [-82.882, 8.13], [-82.914, 8.2], [-82.95, 8.257], [-83.022, 8.316], [-83.026, 8.337], [-82.997, 8.368], [-82.86, 8.453], [-82.846, 8.49], [-82.842, 8.564], [-82.857, 8.636], [-82.918, 8.74], [-82.882, 8.806], [-82.813, 8.858], [-82.741, 8.899], [-82.727, 8.917], [-82.741, 8.951], [-82.785, 8.99], [-82.882, 9.056], [-82.939, 9.061], [-82.943, 9.248], [-82.939, 9.45], [-82.925, 9.469], [-82.889, 9.481], [-82.86, 9.512], [-82.842, 9.571], [-82.803, 9.592], [-82.723, 9.547], [-82.644, 9.505], [-82.612, 9.519], [-82.587, 9.538], [-82.569, 9.559], [-82.565, 9.576]], [[-83.641, 10.917], [-83.659, 10.837], [-83.713, 10.786], [-83.811, 10.743], [-83.919, 10.736], [-84.095, 10.776], [-84.167, 10.781], [-84.196, 10.802], [-84.207, 10.842], [-84.257, 10.901], [-84.347, 10.979], [-84.401, 10.974], [-84.487, 10.991], [-84.635, 11.045], [-84.7, 11.052], [-84.797, 11.005], [-84.909, 10.946], [-85.179, 11.04], [-85.369, 11.106], [-85.539, 11.167], [-85.585, 11.189], [-85.621, 11.184], [-85.654, 11.153], [-85.69, 11.097], [-85.704, 11.082], [-85.722, 11.066], [-85.744, 11.062]], [[-86.377, 13.755], [-86.331, 13.771], [-86.237, 13.899], [-86.151, 13.995], [-86.089, 14.038], [-86.039, 14.05], [-85.985, 13.965], [-85.787, 13.845], [-85.755, 13.852], [-85.733, 13.859], [-85.729, 13.877], [-85.729, 13.932], [-85.683, 13.982], [-85.578, 14.028], [-85.477, 14.109], [-85.373, 14.224], [-85.283, 14.291], [-85.207, 14.312], [-85.179, 14.343], [-85.197, 14.385], [-85.193, 14.446], [-85.161, 14.526], [-85.117, 14.571], [-85.06, 14.583], [-85.038, 14.607], [-85.049, 14.646], [-85.038, 14.685], [-84.984, 14.753], [-84.862, 14.81], [-84.79, 14.79], [-84.729, 14.713], [-84.646, 14.661], [-84.538, 14.633], [-84.455, 14.644], [-84.394, 14.692], [-84.34, 14.706], [-84.293, 14.687], [-84.268, 14.698], [-84.264, 14.739], [-84.239, 14.748], [-84.192, 14.725], [-84.149, 14.72], [-84.113, 14.731], [-84.099, 14.751], [-84.091, 14.771], [-84.066, 14.786], [-83.973, 14.771], [-83.868, 14.795], [-83.749, 14.856], [-83.674, 14.883], [-83.634, 14.876], [-83.591, 14.908], [-83.537, 14.977], [-83.415, 15.008], [-83.159, 14.993]]], "coast": [[[-78.897, 8.274], [-78.918, 8.233], [-78.965, 8.326], [-78.958, 8.351], [-78.961, 8.436], [-78.915, 8.458], [-78.882, 8.46], [-78.857, 8.448], [-78.839, 8.347], [-78.853, 8.302], [-78.897, 8.274]], [[-81.604, 7.334], [-81.658, 7.328], [-81.769, 7.37], [-81.852, 7.453], [-81.859, 7.479], [-81.856, 7.507], [-81.813, 7.592], [-81.751, 7.622], [-81.73, 7.622], [-81.672, 7.523], [-81.712, 7.486], [-81.694, 7.426], [-81.615, 7.38], [-81.604, 7.334]], [[-82.234, 9.38], [-82.245, 9.333], [-82.32, 9.418], [-82.277, 9.432], [-82.259, 9.431], [-82.234, 9.38]], [[-79.066, 8.254], [-79.109, 8.21], [-79.127, 8.252], [-79.095, 8.295], [-79.084, 8.295], [-79.066, 8.254]], [[-86.439, 16.415], [-86.338, 16.439], [-86.255, 16.428], [-86.421, 16.378]], [[-85.87, 16.461], [-85.945, 16.404], [-85.96, 16.43], [-85.924, 16.484]], [[-85.845, 16.487], [-85.87, 16.461]], [[-78.115, 2.542], [-78.141, 2.52], [-78.191, 2.559], [-78.209, 2.61], [-78.18, 2.646], [-78.137, 2.634], [-78.119, 2.603], [-78.115, 2.542]], [[-78.065, 2.509], [-78.029, 2.544], [-77.986, 2.568], [-77.932, 2.629], [-77.899, 2.698], [-77.874, 2.726], [-77.813, 2.716], [-77.809, 2.747], [-77.777, 2.787], [-77.669, 2.879], [-77.673, 2.919], [-77.701, 3.007], [-77.694, 3.04], [-77.633, 3.051], [-77.557, 3.077], [-77.521, 3.16], [-77.471, 3.233], [-77.417, 3.342], [-77.356, 3.349], [-77.323, 3.474], [-77.244, 3.585], [-77.079, 3.914], [-77.125, 3.907], [-77.165, 3.861], [-77.212, 3.867], [-77.262, 3.893], [-77.248, 4.04], [-77.277, 4.058], [-77.359, 3.945], [-77.428, 4.061], [-77.435, 4.131], [-77.406, 4.2], [-77.41, 4.247], [-77.521, 4.212], [-77.514, 4.256], [-77.446, 4.301], [-77.413, 4.348], [-77.352, 4.398], [-77.327, 4.474], [-77.313, 4.594], [-77.287, 4.723], [-77.305, 4.785], [-77.338, 4.839], [-77.367, 5.077], [-77.359, 5.216], [-77.374, 5.323], [-77.403, 5.417], [-77.536, 5.537], [-77.323, 5.676], [-77.248, 5.78], [-77.345, 5.995], [-77.471, 6.177], [-77.475, 6.285], [-77.439, 6.271], [-77.399, 6.275], [-77.359, 6.504], [-77.37, 6.575], [-77.439, 6.691], [-77.525, 6.693], [-77.601, 6.837], [-77.647, 6.87], [-77.68, 6.96], [-77.802, 7.137], [-77.899, 7.229], [-77.928, 7.257], [-78.169, 7.544], [-78.378, 7.899], [-78.421, 8.061], [-78.367, 8.071], [-78.317, 8.066], [-78.288, 8.092], [-78.256, 8.139], [-78.281, 8.248], [-78.18, 8.33], [-78.141, 8.386], [-78.115, 8.38], [-78.047, 8.285], [-77.953, 8.231], [-77.835, 8.151], [-77.759, 8.134], [-77.853, 8.215], [-78.011, 8.325], [-78.058, 8.398], [-78.101, 8.497], [-78.162, 8.453], [-78.191, 8.417], [-78.223, 8.396], [-78.252, 8.422], [-78.256, 8.453], [-78.349, 8.46], [-78.375, 8.49], [-78.4, 8.505], [-78.389, 8.443], [-78.371, 8.405], [-78.378, 8.358], [-78.411, 8.356], [-78.436, 8.403], [-78.468, 8.446], [-78.515, 8.629], [-78.619, 8.714], [-78.67, 8.741], [-78.709, 8.754], [-78.771, 8.811], [-78.85, 8.842], [-78.954, 8.932], [-79.087, 8.997], [-79.246, 9.021], [-79.44, 9.005], [-79.509, 8.971], [-79.552, 8.924], [-79.573, 8.903], [-79.689, 8.851], [-79.732, 8.776], [-79.757, 8.712], [-79.815, 8.639], [-79.75, 8.596], [-80.124, 8.349], [-80.2, 8.314], [-80.369, 8.288], [-80.409, 8.262], [-80.459, 8.214], [-80.466, 8.141], [-80.459, 8.077], [-80.409, 8.028], [-80.365, 7.998], [-80.261, 7.851], [-80.074, 7.667], [-80.041, 7.599], [-80.013, 7.5], [-80.067, 7.453], [-80.11, 7.434], [-80.286, 7.426], [-80.347, 7.386], [-80.373, 7.325], [-80.437, 7.274], [-80.668, 7.226], [-80.844, 7.221], [-80.902, 7.278], [-80.916, 7.438], [-81.035, 7.712], [-81.064, 7.899], [-81.093, 7.877], [-81.157, 7.854], [-81.179, 7.807], [-81.197, 7.669], [-81.219, 7.622], [-81.269, 7.625], [-81.37, 7.675], [-81.503, 7.721], [-81.676, 8.016], [-81.694, 8.071], [-81.726, 8.137], [-81.859, 8.165], [-81.975, 8.215], [-82.097, 8.222], [-82.158, 8.195], [-82.223, 8.231], [-82.234, 8.311], [-82.363, 8.274], [-82.533, 8.287], [-82.68, 8.321], [-82.781, 8.304], [-82.867, 8.247], [-82.853, 8.099], [-82.878, 8.071], [-82.947, 8.182], [-83.04, 8.288], [-83.123, 8.353], [-83.13, 8.505], [-83.163, 8.589], [-83.285, 8.665], [-83.393, 8.717], [-83.469, 8.707], [-83.422, 8.62], [-83.299, 8.507], [-83.289, 8.464], [-83.292, 8.406], [-83.375, 8.415], [-83.451, 8.439], [-83.544, 8.446], [-83.605, 8.481], [-83.735, 8.615], [-83.641, 8.729], [-83.613, 8.804], [-83.616, 8.96], [-83.638, 9.035], [-83.739, 9.151], [-83.897, 9.276], [-84.117, 9.38], [-84.221, 9.462], [-84.484, 9.526], [-84.581, 9.568], [-84.66, 9.646], [-84.671, 9.703], [-84.642, 9.79], [-84.714, 9.899], [-85.024, 10.116], [-85.197, 10.196], [-85.236, 10.241], [-85.261, 10.257], [-85.236, 10.108], [-85.161, 10.017], [-84.963, 9.934], [-84.909, 9.885], [-84.887, 9.821], [-85.002, 9.7], [-85.06, 9.668], [-85.078, 9.602], [-85.114, 9.582], [-85.153, 9.62], [-85.315, 9.811], [-85.625, 9.903], [-85.683, 9.958], [-85.798, 10.134], [-85.848, 10.292], [-85.83, 10.398], [-85.704, 10.564], [-85.665, 10.635], [-85.672, 10.681], [-85.668, 10.745], [-85.715, 10.79], [-85.834, 10.851], [-85.909, 10.898], [-85.888, 10.922], [-85.751, 10.986], [-85.744, 11.043], [-85.744, 11.062], [-85.744, 11.088], [-85.83, 11.2], [-85.96, 11.332], [-86.467, 11.738]], [[-86.482, 15.802], [-86.356, 15.783], [-86.179, 15.885], [-86.068, 15.906], [-85.935, 15.953], [-85.953, 16.003], [-85.985, 16.024], [-85.783, 16.003], [-85.485, 15.899], [-85.164, 15.918], [-85.049, 15.974], [-84.973, 15.989], [-84.646, 15.883], [-84.559, 15.802], [-84.491, 15.795], [-84.441, 15.812], [-84.426, 15.83], [-84.491, 15.847], [-84.52, 15.873], [-84.261, 15.823], [-83.775, 15.437], [-83.764, 15.406], [-83.973, 15.519], [-84.084, 15.51], [-84.113, 15.493], [-84.106, 15.43], [-84.095, 15.401], [-84.048, 15.397], [-84.012, 15.415], [-83.926, 15.394], [-83.872, 15.352], [-83.803, 15.29], [-83.76, 15.22], [-83.717, 15.218], [-83.674, 15.26], [-83.591, 15.265], [-83.537, 15.22], [-83.497, 15.222], [-83.551, 15.295], [-83.677, 15.366], [-83.645, 15.368], [-83.368, 15.239], [-83.292, 15.08], [-83.224, 15.043], [-83.159, 14.993], [-83.184, 14.956], [-83.217, 14.932], [-83.281, 14.812], [-83.303, 14.802], [-83.307, 14.89], [-83.343, 14.902], [-83.389, 14.871], [-83.415, 14.826], [-83.375, 14.765], [-83.339, 14.765], [-83.299, 14.75], [-83.188, 14.34], [-83.213, 14.267], [-83.281, 14.154], [-83.346, 14.057], [-83.411, 13.996], [-83.494, 13.739], [-83.566, 13.321], [-83.515, 12.944], [-83.541, 12.597], [-83.519, 12.514], [-83.512, 12.411], [-83.566, 12.394], [-83.595, 12.396], [-83.627, 12.46], [-83.623, 12.514], [-83.591, 12.58], [-83.577, 12.667], [-83.595, 12.713], [-83.627, 12.613], [-83.681, 12.568], [-83.717, 12.552], [-83.753, 12.502], [-83.717, 12.406], [-83.667, 12.337], [-83.652, 12.286], [-83.67, 12.227], [-83.681, 12.024], [-83.699, 12.029], [-83.717, 12.057], [-83.767, 12.059], [-83.775, 11.977], [-83.771, 11.932], [-83.814, 11.896], [-83.829, 11.861], [-83.793, 11.837], [-83.753, 11.821], [-83.706, 11.825], [-83.663, 11.724], [-83.652, 11.642], [-83.746, 11.566], [-83.778, 11.503], [-83.829, 11.429], [-83.857, 11.354], [-83.868, 11.3], [-83.832, 11.13], [-83.767, 11.01], [-83.713, 10.934], [-83.641, 10.917], [-83.616, 10.877], [-83.587, 10.814], [-83.577, 10.734], [-83.447, 10.465], [-83.346, 10.316], [-83.123, 10.042], [-83.029, 9.991], [-82.867, 9.771], [-82.81, 9.734], [-82.777, 9.67], [-82.612, 9.616], [-82.565, 9.576], [-82.5, 9.523], [-82.371, 9.429], [-82.363, 9.382], [-82.374, 9.337], [-82.338, 9.208], [-82.273, 9.191], [-82.205, 9.215], [-82.187, 9.191], [-82.201, 9.168], [-82.234, 9.142], [-82.245, 9.031], [-82.133, 8.979], [-82.079, 8.934], [-81.895, 8.957], [-81.827, 8.945], [-81.78, 8.957], [-81.831, 9.045], [-81.899, 9.111], [-81.895, 9.141], [-81.841, 9.118], [-81.802, 9.075], [-81.712, 9.019], [-81.546, 8.826], [-81.355, 8.781], [-81.204, 8.787], [-81.064, 8.813], [-80.837, 8.887], [-80.675, 9.023], [-80.545, 9.082], [-80.128, 9.21], [-79.977, 9.344], [-79.915, 9.361], [-79.854, 9.379], [-79.725, 9.479], [-79.653, 9.559], [-79.577, 9.597], [-79.354, 9.569], [-79.213, 9.531], [-79.113, 9.536], [-79.015, 9.51], [-78.976, 9.453], [-78.933, 9.429], [-78.699, 9.434], [-78.504, 9.406], [-78.083, 9.236], [-77.831, 9.068], [-77.698, 8.889], [-77.374, 8.658], [-77.345, 8.637], [-77.262, 8.493], [-77.129, 8.401], [-76.992, 8.25], [-76.935, 8.148], [-76.891, 8.129], [-76.852, 8.09], [-76.87, 8.063], [-76.913, 8.033], [-76.924, 7.972], [-76.895, 7.939], [-76.866, 7.919], [-76.787, 7.932], [-76.744, 8.002], [-76.773, 8.311], [-76.819, 8.465], [-76.873, 8.512], [-76.92, 8.573], [-76.888, 8.62], [-76.801, 8.641], [-76.69, 8.695], [-76.276, 8.99], [-76.135, 9.266], [-76.027, 9.366], [-75.905, 9.431], [-75.757, 9.415], [-75.639, 9.45], [-75.603, 9.538], [-75.635, 9.658], [-75.682, 9.729], [-75.639, 9.835], [-75.592, 9.993], [-75.595, 10.125], [-75.538, 10.205], [-75.559, 10.236], [-75.642, 10.172], [-75.707, 10.144], [-75.671, 10.196], [-75.552, 10.328], [-75.495, 10.528], [-75.448, 10.611], [-75.282, 10.727], [-75.246, 10.783], [-75.124, 10.87], [-74.922, 11.057], [-74.843, 11.109], [-74.454, 10.99], [-74.332, 10.996], [-74.353, 10.974], [-74.411, 10.967], [-74.494, 10.934], [-74.515, 10.863], [-74.461, 10.786], [-74.4, 10.766], [-74.35, 10.814], [-74.299, 10.953], [-74.22, 11.106], [-74.199, 11.266], [-74.145, 11.321], [-74.058, 11.34], [-73.911, 11.309], [-73.795, 11.276], [-73.677, 11.271]]], "polys": [{"n": "Panama", "r": [[[-77.374, 8.658], [-77.392, 8.644], [-77.449, 8.566], [-77.478, 8.498], [-77.406, 8.427], [-77.385, 8.351], [-77.345, 8.269], [-77.284, 8.188], [-77.212, 8.033], [-77.197, 7.972], [-77.215, 7.932], [-77.284, 7.908], [-77.345, 7.837], [-77.363, 7.748], [-77.352, 7.705], [-77.539, 7.566], [-77.586, 7.544], [-77.619, 7.564], [-77.658, 7.634], [-77.705, 7.691], [-77.734, 7.71], [-77.748, 7.712], [-77.763, 7.698], [-77.77, 7.669], [-77.745, 7.537], [-77.766, 7.485], [-77.827, 7.443], [-77.899, 7.229], [-77.928, 7.257], [-78.169, 7.544], [-78.378, 7.899], [-78.421, 8.061], [-78.367, 8.071], [-78.317, 8.066], [-78.288, 8.092], [-78.256, 8.139], [-78.281, 8.248], [-78.18, 8.33], [-78.141, 8.386], [-78.115, 8.38], [-78.047, 8.285], [-77.953, 8.231], [-77.835, 8.151], [-77.759, 8.134], [-77.853, 8.215], [-78.011, 8.325], [-78.058, 8.398], [-78.101, 8.497], [-78.162, 8.453], [-78.191, 8.417], [-78.223, 8.396], [-78.252, 8.422], [-78.256, 8.453], [-78.349, 8.46], [-78.375, 8.49], [-78.4, 8.505], [-78.389, 8.443], [-78.371, 8.405], [-78.378, 8.358], [-78.411, 8.356], [-78.436, 8.403], [-78.468, 8.446], [-78.515, 8.629], [-78.619, 8.714], [-78.67, 8.741], [-78.709, 8.754], [-78.771, 8.811], [-78.85, 8.842], [-78.954, 8.932], [-79.087, 8.997], [-79.246, 9.021], [-79.44, 9.005], [-79.509, 8.971], [-79.552, 8.924], [-79.573, 8.903], [-79.689, 8.851], [-79.732, 8.776], [-79.757, 8.712], [-79.815, 8.639], [-79.75, 8.596], [-80.124, 8.349], [-80.2, 8.314], [-80.369, 8.288], [-80.409, 8.262], [-80.459, 8.214], [-80.466, 8.141], [-80.459, 8.077], [-80.409, 8.028], [-80.365, 7.998], [-80.261, 7.851], [-80.074, 7.667], [-80.041, 7.599], [-80.013, 7.5], [-80.067, 7.453], [-80.11, 7.434], [-80.286, 7.426], [-80.347, 7.386], [-80.373, 7.325], [-80.437, 7.274], [-80.668, 7.226], [-80.844, 7.221], [-80.902, 7.278], [-80.916, 7.438], [-81.035, 7.712], [-81.064, 7.899], [-81.093, 7.877], [-81.157, 7.854], [-81.179, 7.807], [-81.197, 7.669], [-81.219, 7.622], [-81.269, 7.625], [-81.37, 7.675], [-81.503, 7.721], [-81.676, 8.016], [-81.694, 8.071], [-81.726, 8.137], [-81.859, 8.165], [-81.975, 8.215], [-82.097, 8.222], [-82.158, 8.195], [-82.223, 8.231], [-82.234, 8.311], [-82.363, 8.274], [-82.533, 8.287], [-82.68, 8.321], [-82.781, 8.304], [-82.867, 8.247], [-82.853, 8.099], [-82.878, 8.071], [-82.882, 8.13], [-82.914, 8.2], [-82.95, 8.257], [-83.022, 8.316], [-83.026, 8.337], [-82.997, 8.368], [-82.86, 8.453], [-82.846, 8.49], [-82.842, 8.564], [-82.857, 8.636], [-82.918, 8.74], [-82.882, 8.806], [-82.813, 8.858], [-82.741, 8.899], [-82.727, 8.917], [-82.741, 8.951], [-82.785, 8.99], [-82.882, 9.056], [-82.939, 9.061], [-82.943, 9.248], [-82.939, 9.45], [-82.925, 9.469], [-82.889, 9.481], [-82.86, 9.512], [-82.842, 9.571], [-82.803, 9.592], [-82.723, 9.547], [-82.644, 9.505], [-82.612, 9.519], [-82.587, 9.538], [-82.569, 9.559], [-82.565, 9.576], [-82.5, 9.523], [-82.371, 9.429], [-82.363, 9.382], [-82.374, 9.337], [-82.338, 9.208], [-82.273, 9.191], [-82.205, 9.215], [-82.187, 9.191], [-82.201, 9.168], [-82.234, 9.142], [-82.245, 9.031], [-82.133, 8.979], [-82.079, 8.934], [-81.895, 8.957], [-81.827, 8.945], [-81.78, 8.957], [-81.831, 9.045], [-81.899, 9.111], [-81.895, 9.141], [-81.841, 9.118], [-81.802, 9.075], [-81.712, 9.019], [-81.546, 8.826], [-81.355, 8.781], [-81.204, 8.787], [-81.064, 8.813], [-80.837, 8.887], [-80.675, 9.023], [-80.545, 9.082], [-80.128, 9.21], [-79.977, 9.344], [-79.915, 9.361], [-79.854, 9.379], [-79.725, 9.479], [-79.653, 9.559], [-79.577, 9.597], [-79.354, 9.569], [-79.213, 9.531], [-79.113, 9.536], [-79.015, 9.51], [-78.976, 9.453], [-78.933, 9.429], [-78.699, 9.434], [-78.504, 9.406], [-78.083, 9.236], [-77.831, 9.068], [-77.698, 8.889], [-77.374, 8.658]], [[-78.897, 8.274], [-78.918, 8.233], [-78.965, 8.326], [-78.958, 8.351], [-78.961, 8.436], [-78.915, 8.458], [-78.882, 8.46], [-78.857, 8.448], [-78.839, 8.347], [-78.853, 8.302], [-78.897, 8.274]], [[-81.604, 7.334], [-81.658, 7.328], [-81.769, 7.37], [-81.852, 7.453], [-81.859, 7.479], [-81.856, 7.507], [-81.813, 7.592], [-81.751, 7.622], [-81.73, 7.622], [-81.672, 7.523], [-81.712, 7.486], [-81.694, 7.426], [-81.615, 7.38], [-81.604, 7.334]], [[-82.234, 9.38], [-82.245, 9.333], [-82.32, 9.418], [-82.277, 9.432], [-82.259, 9.431], [-82.234, 9.38]], [[-79.066, 8.254], [-79.109, 8.21], [-79.127, 8.252], [-79.095, 8.295], [-79.084, 8.295], [-79.066, 8.254]]]}, {"n": "Nicaragua", "r": [[[-83.159, 14.993], [-83.184, 14.956], [-83.217, 14.932], [-83.281, 14.812], [-83.303, 14.802], [-83.307, 14.89], [-83.343, 14.902], [-83.389, 14.871], [-83.415, 14.826], [-83.375, 14.765], [-83.339, 14.765], [-83.299, 14.75], [-83.188, 14.34], [-83.213, 14.267], [-83.281, 14.154], [-83.346, 14.057], [-83.411, 13.996], [-83.494, 13.739], [-83.566, 13.321], [-83.515, 12.944], [-83.541, 12.597], [-83.519, 12.514], [-83.512, 12.411], [-83.566, 12.394], [-83.595, 12.396], [-83.627, 12.46], [-83.623, 12.514], [-83.591, 12.58], [-83.577, 12.667], [-83.595, 12.713], [-83.627, 12.613], [-83.681, 12.568], [-83.717, 12.552], [-83.753, 12.502], [-83.717, 12.406], [-83.667, 12.337], [-83.652, 12.286], [-83.67, 12.227], [-83.681, 12.024], [-83.699, 12.029], [-83.717, 12.057], [-83.767, 12.059], [-83.775, 11.977], [-83.771, 11.932], [-83.814, 11.896], [-83.829, 11.861], [-83.793, 11.837], [-83.753, 11.821], [-83.706, 11.825], [-83.663, 11.724], [-83.652, 11.642], [-83.746, 11.566], [-83.778, 11.503], [-83.829, 11.429], [-83.857, 11.354], [-83.868, 11.3], [-83.832, 11.13], [-83.767, 11.01], [-83.713, 10.934], [-83.641, 10.917], [-83.659, 10.837], [-83.713, 10.786], [-83.811, 10.743], [-83.919, 10.736], [-84.095, 10.776], [-84.167, 10.781], [-84.196, 10.802], [-84.207, 10.842], [-84.257, 10.901], [-84.347, 10.979], [-84.401, 10.974], [-84.487, 10.991], [-84.635, 11.045], [-84.7, 11.052], [-84.797, 11.005], [-84.909, 10.946], [-85.179, 11.04], [-85.369, 11.106], [-85.539, 11.167], [-85.585, 11.189], [-85.621, 11.184], [-85.654, 11.153], [-85.69, 11.097], [-85.704, 11.082], [-85.722, 11.066], [-85.744, 11.062], [-85.744, 11.088], [-85.83, 11.2], [-85.96, 11.332], [-86.467, 11.738], [-86.5, 11.78], [-86.5, 13.765], [-86.377, 13.755], [-86.331, 13.771], [-86.237, 13.899], [-86.151, 13.995], [-86.089, 14.038], [-86.039, 14.05], [-85.985, 13.965], [-85.787, 13.845], [-85.755, 13.852], [-85.733, 13.859], [-85.729, 13.877], [-85.729, 13.932], [-85.683, 13.982], [-85.578, 14.028], [-85.477, 14.109], [-85.373, 14.224], [-85.283, 14.291], [-85.207, 14.312], [-85.179, 14.343], [-85.197, 14.385], [-85.193, 14.446], [-85.161, 14.526], [-85.117, 14.571], [-85.06, 14.583], [-85.038, 14.607], [-85.049, 14.646], [-85.038, 14.685], [-84.984, 14.753], [-84.862, 14.81], [-84.79, 14.79], [-84.729, 14.713], [-84.646, 14.661], [-84.538, 14.633], [-84.455, 14.644], [-84.394, 14.692], [-84.34, 14.706], [-84.293, 14.687], [-84.268, 14.698], [-84.264, 14.739], [-84.239, 14.748], [-84.192, 14.725], [-84.149, 14.72], [-84.113, 14.731], [-84.099, 14.751], [-84.091, 14.771], [-84.066, 14.786], [-83.973, 14.771], [-83.868, 14.795], [-83.749, 14.856], [-83.674, 14.883], [-83.634, 14.876], [-83.591, 14.908], [-83.537, 14.977], [-83.415, 15.008], [-83.159, 14.993]]]}, {"n": "Honduras", "r": [[[-83.159, 14.993], [-83.415, 15.008], [-83.537, 14.977], [-83.591, 14.908], [-83.634, 14.876], [-83.674, 14.883], [-83.749, 14.856], [-83.868, 14.795], [-83.973, 14.771], [-84.066, 14.786], [-84.091, 14.771], [-84.099, 14.751], [-84.113, 14.731], [-84.149, 14.72], [-84.192, 14.725], [-84.239, 14.748], [-84.264, 14.739], [-84.268, 14.698], [-84.293, 14.687], [-84.34, 14.706], [-84.394, 14.692], [-84.455, 14.644], [-84.538, 14.633], [-84.646, 14.661], [-84.729, 14.713], [-84.79, 14.79], [-84.862, 14.81], [-84.984, 14.753], [-85.038, 14.685], [-85.049, 14.646], [-85.038, 14.607], [-85.06, 14.583], [-85.117, 14.571], [-85.161, 14.526], [-85.193, 14.446], [-85.197, 14.385], [-85.179, 14.343], [-85.207, 14.312], [-85.283, 14.291], [-85.373, 14.224], [-85.477, 14.109], [-85.578, 14.028], [-85.683, 13.982], [-85.729, 13.932], [-85.729, 13.877], [-85.733, 13.859], [-85.755, 13.852], [-85.787, 13.845], [-85.985, 13.965], [-86.039, 14.05], [-86.089, 14.038], [-86.151, 13.995], [-86.237, 13.899], [-86.331, 13.771], [-86.377, 13.755], [-86.5, 13.765], [-86.5, 15.801], [-86.482, 15.802], [-86.356, 15.783], [-86.179, 15.885], [-86.068, 15.906], [-85.935, 15.953], [-85.953, 16.003], [-85.985, 16.024], [-85.783, 16.003], [-85.485, 15.899], [-85.164, 15.918], [-85.049, 15.974], [-84.973, 15.989], [-84.646, 15.883], [-84.559, 15.802], [-84.491, 15.795], [-84.441, 15.812], [-84.426, 15.83], [-84.491, 15.847], [-84.52, 15.873], [-84.261, 15.823], [-83.775, 15.437], [-83.764, 15.406], [-83.973, 15.519], [-84.084, 15.51], [-84.113, 15.493], [-84.106, 15.43], [-84.095, 15.401], [-84.048, 15.397], [-84.012, 15.415], [-83.926, 15.394], [-83.872, 15.352], [-83.803, 15.29], [-83.76, 15.22], [-83.717, 15.218], [-83.674, 15.26], [-83.591, 15.265], [-83.537, 15.22], [-83.497, 15.222], [-83.551, 15.295], [-83.677, 15.366], [-83.645, 15.368], [-83.368, 15.239], [-83.292, 15.08], [-83.224, 15.043], [-83.159, 14.993]], [[-86.421, 16.378], [-86.5, 16.339], [-86.5, 16.388], [-86.439, 16.415], [-86.338, 16.439], [-86.255, 16.428], [-86.421, 16.378]], [[-85.87, 16.461], [-85.945, 16.404], [-85.96, 16.43], [-85.924, 16.484], [-85.898, 16.5], [-85.839, 16.5], [-85.845, 16.487], [-85.87, 16.461]]]}, {"n": "Costa Rica", "r": [[[-82.565, 9.576], [-82.569, 9.559], [-82.587, 9.538], [-82.612, 9.519], [-82.644, 9.505], [-82.723, 9.547], [-82.803, 9.592], [-82.842, 9.571], [-82.86, 9.512], [-82.889, 9.481], [-82.925, 9.469], [-82.939, 9.45], [-82.943, 9.248], [-82.939, 9.061], [-82.882, 9.056], [-82.785, 8.99], [-82.741, 8.951], [-82.727, 8.917], [-82.741, 8.899], [-82.813, 8.858], [-82.882, 8.806], [-82.918, 8.74], [-82.857, 8.636], [-82.842, 8.564], [-82.846, 8.49], [-82.86, 8.453], [-82.997, 8.368], [-83.026, 8.337], [-83.022, 8.316], [-82.95, 8.257], [-82.914, 8.2], [-82.882, 8.13], [-82.878, 8.071], [-82.947, 8.182], [-83.04, 8.288], [-83.123, 8.353], [-83.13, 8.505], [-83.163, 8.589], [-83.285, 8.665], [-83.393, 8.717], [-83.469, 8.707], [-83.422, 8.62], [-83.299, 8.507], [-83.289, 8.464], [-83.292, 8.406], [-83.375, 8.415], [-83.451, 8.439], [-83.544, 8.446], [-83.605, 8.481], [-83.735, 8.615], [-83.641, 8.729], [-83.613, 8.804], [-83.616, 8.96], [-83.638, 9.035], [-83.739, 9.151], [-83.897, 9.276], [-84.117, 9.38], [-84.221, 9.462], [-84.484, 9.526], [-84.581, 9.568], [-84.66, 9.646], [-84.671, 9.703], [-84.642, 9.79], [-84.714, 9.899], [-85.024, 10.116], [-85.197, 10.196], [-85.236, 10.241], [-85.261, 10.257], [-85.236, 10.108], [-85.161, 10.017], [-84.963, 9.934], [-84.909, 9.885], [-84.887, 9.821], [-85.002, 9.7], [-85.06, 9.668], [-85.078, 9.602], [-85.114, 9.582], [-85.153, 9.62], [-85.315, 9.811], [-85.625, 9.903], [-85.683, 9.958], [-85.798, 10.134], [-85.848, 10.292], [-85.83, 10.398], [-85.704, 10.564], [-85.665, 10.635], [-85.672, 10.681], [-85.668, 10.745], [-85.715, 10.79], [-85.834, 10.851], [-85.909, 10.898], [-85.888, 10.922], [-85.751, 10.986], [-85.744, 11.043], [-85.744, 11.062], [-85.722, 11.066], [-85.704, 11.082], [-85.69, 11.097], [-85.654, 11.153], [-85.621, 11.184], [-85.585, 11.189], [-85.539, 11.167], [-85.369, 11.106], [-85.179, 11.04], [-84.909, 10.946], [-84.797, 11.005], [-84.7, 11.052], [-84.635, 11.045], [-84.487, 10.991], [-84.401, 10.974], [-84.347, 10.979], [-84.257, 10.901], [-84.207, 10.842], [-84.196, 10.802], [-84.167, 10.781], [-84.095, 10.776], [-83.919, 10.736], [-83.811, 10.743], [-83.713, 10.786], [-83.659, 10.837], [-83.641, 10.917], [-83.616, 10.877], [-83.587, 10.814], [-83.577, 10.734], [-83.447, 10.465], [-83.346, 10.316], [-83.123, 10.042], [-83.029, 9.991], [-82.867, 9.771], [-82.81, 9.734], [-82.777, 9.67], [-82.612, 9.616], [-82.565, 9.576]]]}, {"n": "Colombia", "r": [[[-73.5, 2.5], [-78.306, 2.5], [-78.295, 2.511], [-78.21, 2.5], [-78.089, 2.5], [-78.065, 2.509], [-78.029, 2.544], [-77.986, 2.568], [-77.932, 2.629], [-77.899, 2.698], [-77.874, 2.726], [-77.813, 2.716], [-77.809, 2.747], [-77.777, 2.787], [-77.669, 2.879], [-77.673, 2.919], [-77.701, 3.007], [-77.694, 3.04], [-77.633, 3.051], [-77.557, 3.077], [-77.521, 3.16], [-77.471, 3.233], [-77.417, 3.342], [-77.356, 3.349], [-77.323, 3.474], [-77.244, 3.585], [-77.079, 3.914], [-77.125, 3.907], [-77.165, 3.861], [-77.212, 3.867], [-77.262, 3.893], [-77.248, 4.04], [-77.277, 4.058], [-77.359, 3.945], [-77.428, 4.061], [-77.435, 4.131], [-77.406, 4.2], [-77.41, 4.247], [-77.521, 4.212], [-77.514, 4.256], [-77.446, 4.301], [-77.413, 4.348], [-77.352, 4.398], [-77.327, 4.474], [-77.313, 4.594], [-77.287, 4.723], [-77.305, 4.785], [-77.338, 4.839], [-77.367, 5.077], [-77.359, 5.216], [-77.374, 5.323], [-77.403, 5.417], [-77.536, 5.537], [-77.323, 5.676], [-77.248, 5.78], [-77.345, 5.995], [-77.471, 6.177], [-77.475, 6.285], [-77.439, 6.271], [-77.399, 6.275], [-77.359, 6.504], [-77.37, 6.575], [-77.439, 6.691], [-77.525, 6.693], [-77.601, 6.837], [-77.647, 6.87], [-77.68, 6.96], [-77.802, 7.137], [-77.899, 7.229], [-77.827, 7.443], [-77.766, 7.485], [-77.745, 7.537], [-77.77, 7.669], [-77.763, 7.698], [-77.748, 7.712], [-77.734, 7.71], [-77.705, 7.691], [-77.658, 7.634], [-77.619, 7.564], [-77.586, 7.544], [-77.539, 7.566], [-77.352, 7.705], [-77.363, 7.748], [-77.345, 7.837], [-77.284, 7.908], [-77.215, 7.932], [-77.197, 7.972], [-77.212, 8.033], [-77.284, 8.188], [-77.345, 8.269], [-77.385, 8.351], [-77.406, 8.427], [-77.478, 8.498], [-77.449, 8.566], [-77.392, 8.644], [-77.374, 8.658], [-77.345, 8.637], [-77.262, 8.493], [-77.129, 8.401], [-76.992, 8.25], [-76.935, 8.148], [-76.891, 8.129], [-76.852, 8.09], [-76.87, 8.063], [-76.913, 8.033], [-76.924, 7.972], [-76.895, 7.939], [-76.866, 7.919], [-76.787, 7.932], [-76.744, 8.002], [-76.773, 8.311], [-76.819, 8.465], [-76.873, 8.512], [-76.92, 8.573], [-76.888, 8.62], [-76.801, 8.641], [-76.69, 8.695], [-76.276, 8.99], [-76.135, 9.266], [-76.027, 9.366], [-75.905, 9.431], [-75.757, 9.415], [-75.639, 9.45], [-75.603, 9.538], [-75.635, 9.658], [-75.682, 9.729], [-75.639, 9.835], [-75.592, 9.993], [-75.595, 10.125], [-75.538, 10.205], [-75.559, 10.236], [-75.642, 10.172], [-75.707, 10.144], [-75.671, 10.196], [-75.552, 10.328], [-75.495, 10.528], [-75.448, 10.611], [-75.282, 10.727], [-75.246, 10.783], [-75.124, 10.87], [-74.922, 11.057], [-74.843, 11.109], [-74.454, 10.99], [-74.332, 10.996], [-74.353, 10.974], [-74.411, 10.967], [-74.494, 10.934], [-74.515, 10.863], [-74.461, 10.786], [-74.4, 10.766], [-74.35, 10.814], [-74.299, 10.953], [-74.22, 11.106], [-74.199, 11.266], [-74.145, 11.321], [-74.058, 11.34], [-73.911, 11.309], [-73.795, 11.276], [-73.677, 11.271], [-73.5, 11.283]], [[-78.115, 2.542], [-78.141, 2.52], [-78.191, 2.559], [-78.209, 2.61], [-78.18, 2.646], [-78.137, 2.634], [-78.119, 2.603], [-78.115, 2.542]]]}]}</script>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+} }
+</script>
+<script>
+  window.__failTimer = setTimeout(()=>{ const e=document.getElementById('ldMsg'); if(e) e.textContent='No se pudo cargar Three.js desde el CDN. Se necesita conexión a Internet.'; }, 15000);
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { Line2 } from 'three/addons/lines/Line2.js';
+import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
+import { LineGeometry } from 'three/addons/lines/LineGeometry.js';
+
+/* ═════════════════════════════ 1. DATOS ═════════════════════════════ */
+const DATA = JSON.parse(document.getElementById('datos-aip').textContent);
+const GEO  = JSON.parse(document.getElementById('geo-ref').textContent);
+const PTS = DATA.points, ROUTES = DATA.routes;
+const $ = id => document.getElementById(id);
+const esc = s => String(s??'').replace(/[&<>"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const isMobile = () => innerWidth <= 820;
+
+// Familias de designador (A=Alpha, G=Golf, L=Lima, M=Mike, N=November, P=Papa): un tono por familia
+const FAMILIES = {
+  UA:{name:'Alpha',    hue:4,   kind:'Convencional'},
+  UG:{name:'Golf',     hue:30,  kind:'Convencional'},
+  UL:{name:'Lima',     hue:140, kind:'RNAV 5'},
+  UM:{name:'Mike',     hue:200, kind:'RNAV 5'},
+  UN:{name:'November', hue:285, kind:'RNAV 5'},
+  UP:{name:'Papa',     hue:50,  kind:'RNAV 5'},
+};
+const famIdx = {}; for (const r of ROUTES) (famIdx[r.family] ??= []).push(r.id);
+let theme = 'dark';
+try { const t=localStorage.getItem('firpa-theme'); if (t) theme=t; } catch(e){}
+function routeColor(r){ // mismo tono por familia, luminosidad distinta por ruta
+  const list=famIdx[r.family], i=list.indexOf(r.id), n=list.length, f=n===1?.5:i/(n-1);
+  const l = theme==='light' ? 30+16*f : 54+24*f;
+  return new THREE.Color().setHSL(FAMILIES[r.family].hue/360, (r.family==='UP'?96:86)/100, l/100);
+}
+const famCss = f => `hsl(${FAMILIES[f].hue} 86% ${theme==='light'?38:62}%)`;
+
+/* ═════════════════════════════ 2. GEODESIA ═════════════════════════════ */
+const D2R=Math.PI/180, R2D=180/Math.PI, NM=1852, R_NM=6371008.8/NM;
+const C0={lat:9.75, lon:-80.05};                       // centro de proyección
+const BBOX={x0:-86.5, x1:-73.5, y0:2.5, y1:16.5};       // zona representada
+// Azimutal equidistante: plano a escala en NM (distorsión < 0,3 % dentro del FIR). x = Este, −z = Norte
+function project(lat, lon, y=0){
+  const f=lat*D2R, l=lon*D2R, f0=C0.lat*D2R, l0=C0.lon*D2R;
+  const cc=Math.sin(f0)*Math.sin(f)+Math.cos(f0)*Math.cos(f)*Math.cos(l-l0);
+  const c=Math.acos(Math.min(1,Math.max(-1,cc))), k=c<1e-12?1:c/Math.sin(c);
+  return new THREE.Vector3(R_NM*k*Math.cos(f)*Math.sin(l-l0), y, -R_NM*k*(Math.cos(f0)*Math.sin(f)-Math.sin(f0)*Math.cos(f)*Math.cos(l-l0)));
+}
+// Vincenty inverso WGS-84 → distancia NM y rumbos verdaderos
+function vincenty(lat1, lon1, lat2, lon2){
+  const a=6378137, f=1/298.257223563, b=a*(1-f), L=(lon2-lon1)*D2R;
+  const U1=Math.atan((1-f)*Math.tan(lat1*D2R)), U2=Math.atan((1-f)*Math.tan(lat2*D2R));
+  const sU1=Math.sin(U1), cU1=Math.cos(U1), sU2=Math.sin(U2), cU2=Math.cos(U2);
+  let lam=L, it=0, sL, cL, sS, cS, sig, sA, c2A, c2Sm, Cc, lp;
+  do { sL=Math.sin(lam); cL=Math.cos(lam);
+    sS=Math.sqrt((cU2*sL)**2+(cU1*sU2-sU1*cU2*cL)**2); if (sS===0) return {nm:0,crs:0,rev:0};
+    cS=sU1*sU2+cU1*cU2*cL; sig=Math.atan2(sS,cS); sA=cU1*cU2*sL/sS; c2A=1-sA*sA;
+    c2Sm=c2A?cS-2*sU1*sU2/c2A:0; Cc=f/16*c2A*(4+f*(4-3*c2A)); lp=lam;
+    lam=L+(1-Cc)*f*sA*(sig+Cc*sS*(c2Sm+Cc*cS*(-1+2*c2Sm*c2Sm)));
+  } while (Math.abs(lam-lp)>1e-12 && ++it<200);
+  const u2=c2A*(a*a-b*b)/(b*b), A=1+u2/16384*(4096+u2*(-768+u2*(320-175*u2))), B=u2/1024*(256+u2*(-128+u2*(74-47*u2)));
+  const dS=B*sS*(c2Sm+B/4*(cS*(-1+2*c2Sm*c2Sm)-B/6*c2Sm*(-3+4*sS*sS)*(-3+4*c2Sm*c2Sm)));
+  const a1=Math.atan2(cU2*sL,cU1*sU2-sU1*cU2*cL), a2=Math.atan2(cU1*sL,-sU1*cU2+cU1*sU2*cL);
+  return {nm:b*A*(sig-dS)/NM, crs:(a1*R2D+360)%360, rev:(a2*R2D+180+360)%360};
+}
+for (const r of ROUTES){
+  let acc=0, accPub=0;
+  r.legs.forEach((l,i)=>{ const A=PTS[r.points[i]], B=PTS[r.points[i+1]], g=vincenty(A.lat,A.lon,B.lat,B.lon);
+    l.calc=g.nm; l.trueCrs=g.crs; l.trueRev=g.rev; acc+=g.nm; accPub+=l.dist; l.acc=acc; l.accPub=accPub; });
+  r.total=accPub;
+  r.warnCount=(r.status?1:0)+(r.dirNote&&!r.dirNote.startsWith('Bidireccional')?1:0)+r.legs.filter(l=>l.note).length+r.points.filter(p=>PTS[p].notes.length).length;
+}
+const f1=v=>v.toFixed(1), deg3=v=>String(Math.round(v)%360).padStart(3,'0')+'°';
+const parity=m=>{ const v=parseInt(m); return isNaN(v)?null:(v<180?'impares':'pares'); };
+const ftToNM=ft=>ft/6076.12;
+
+/* ═════════════════════════════ 3. ESCENA BASE ═════════════════════════════ */
+const QUALITY = { low:{step:1/12, pr:1}, mid:{step:1/30, pr:1.5}, high:{step:1/60, pr:2} };
+const state = { mode:'layers', spacing:14, exag:5, relief:10, groupBy:'family', quality: isMobile()?'mid':'high', sel:null, selPoint:null, hlLeg:null };
+try { const q=localStorage.getItem('firpa-quality'); if (q && QUALITY[q]) state.quality=q; } catch(e){}
+
+const canvas=$('c');
+const renderer=new THREE.WebGLRenderer({canvas, antialias:true, powerPreference:'high-performance'});
+renderer.setPixelRatio(Math.min(devicePixelRatio, QUALITY[state.quality].pr));
+const scene=new THREE.Scene();
+const camera=new THREE.PerspectiveCamera(40, 1, 3, 30000);
+const controls=new OrbitControls(camera, canvas);
+Object.assign(controls,{enableDamping:true, dampingFactor:.08, screenSpacePanning:true, maxPolarAngle:Math.PI*.49, minDistance:15, maxDistance:3500, zoomSpeed:1.1});
+controls.touches={ONE:THREE.TOUCH.ROTATE, TWO:THREE.TOUCH.DOLLY_PAN};
+
+const THEMES={
+  dark:{bg:0x060a12, deep:0x0a2442, shallow:0x1d5688, glow:0xcfe6ff, glowK:.55, ocean:0x0d2a4b, land:0x24352f, landPA:0x2f463a,
+        border:0xe8f0ff, grid:0x31507a, gridLbl:'#7590b0', fir:0x5cc6ff, fixCol:'#eef3fa', navCol:'#7fdcff', halo:'rgba(4,8,14,.88)', hemi:[0xdde8ff,0x22301f]},
+  light:{bg:0xdce5ee, deep:0x4f86b6, shallow:0x8cc0e4, glow:0xffffff, glowK:.6, ocean:0x7aaed6, land:0xe6e2d3, landPA:0xf1ecdc,
+        border:0x34475e, grid:0x5d7ea3, gridLbl:'#36506d', fir:0x0a78c2, fixCol:'#14202e', navCol:'#0a62a0', halo:'rgba(255,255,255,.92)', hemi:[0xffffff,0x5c6a52]},
+};
+scene.fog=new THREE.Fog(THEMES[theme].bg, 1700, 4600);
+const hemi=new THREE.HemisphereLight(0xdde8ff, 0x22301f, 1.15); scene.add(hemi);
+const sun=new THREE.DirectionalLight(0xfff3e0, 2.1); sun.position.set(-500, 650, -350); scene.add(sun);
+
+// ── Sprites con tamaño fijo en píxeles (sizeAttenuation:false) ──
+const sprites=[];
+const pxScale=()=>2*Math.tan(camera.fov*D2R/2)/renderer.domElement.clientHeight;
+function sizeSprite(o){ const k=pxScale(); o.sprite.scale.set(o.w*k, o.h*k, 1); }
+function trackSprite(sprite,w,h){ const o={sprite,w,h}; sprites.push(o); sprite._sz=o; sizeSprite(o); return sprite; }
+function untrack(s){ const i=sprites.indexOf(s._sz); if(i>=0) sprites.splice(i,1); }
+
+// ── Etiquetas de texto con halo (siempre miran a la cámara) ──
+const MONO='"B612 Mono", ui-monospace, Menlo, monospace';
+function textCanvas(text, {color='#e8eef5', size=12, weight=700, halo=null, bg=null}={}){
+  const dpr=2, cv=document.createElement('canvas'), ctx=cv.getContext('2d'), font=`${weight} ${size*dpr}px ${MONO}`;
+  ctx.font=font; const tw=ctx.measureText(text).width, pad=(bg?6:4)*dpr;
+  cv.width=Math.ceil(tw+pad*2); cv.height=Math.ceil(size*dpr*(bg?1.75:1.5));
+  ctx.font=font; ctx.textBaseline='middle'; ctx.lineJoin='round';
+  if (bg){ ctx.fillStyle=bg; const r=5*dpr; ctx.beginPath(); ctx.roundRect(1,1,cv.width-2,cv.height-2,r); ctx.fill(); }
+  else { ctx.strokeStyle=halo||THEMES[theme].halo; ctx.lineWidth=4*dpr; ctx.strokeText(text,pad,cv.height/2+1); }
+  ctx.fillStyle=color; ctx.fillText(text,pad,cv.height/2+1);
+  const tex=new THREE.CanvasTexture(cv); tex.colorSpace=THREE.SRGBColorSpace; tex.anisotropy=4; tex.generateMipmaps=false; tex.minFilter=THREE.LinearFilter;
+  return {tex, w:cv.width/dpr, h:cv.height/dpr};
+}
+function textSprite(text, opts={}){
+  const {anchor='left', offset=11}=opts, {tex,w,h}=textCanvas(text,opts);
+  const s=new THREE.Sprite(new THREE.SpriteMaterial({map:tex, sizeAttenuation:false, depthTest:false, depthWrite:false, transparent:true}));
+  s.renderOrder=20; s._t={text,opts};
+  if (anchor==='left') s.center.set(-offset/w,.5); else if (anchor==='right') s.center.set(1+offset/w,.5); else if (anchor==='above') s.center.set(.5,-offset/h); else s.center.set(.5,.5);
+  return trackSprite(s,w,h);
+}
+function redrawText(s, color){ if(color) s._t.opts.color=color; const {tex,w,h}=textCanvas(s._t.text,s._t.opts); s.material.map.dispose(); s.material.map=tex; s.material.needsUpdate=true; s._sz.w=w; s._sz.h=h; sizeSprite(s._sz); }
+
+// ── Símbolos OACI (Anexo 4) en canvas ──
+function drawSymbol(ctx, type, S, col, fill){
+  ctx.strokeStyle=col; ctx.fillStyle=col; ctx.lineWidth=S*.09; ctx.lineJoin='round'; const c=S/2;
+  const hex=r=>{ ctx.beginPath(); for(let i=0;i<6;i++){ const a=Math.PI/3*i; ctx.lineTo(c+r*Math.cos(a), c+r*Math.sin(a)); } ctx.closePath(); };
+  const halo=THEMES[theme].halo;
+  if (type==='WPT'){ ctx.beginPath(); ctx.moveTo(c,S*.14); ctx.lineTo(S*.88,S*.82); ctx.lineTo(S*.12,S*.82); ctx.closePath();
+    if (fill){ ctx.fill(); ctx.lineWidth=S*.05; ctx.strokeStyle=halo; ctx.stroke(); } else { ctx.fillStyle=halo; ctx.fill(); ctx.stroke(); } }
+  else if (type==='VOR'){ ctx.fillStyle=halo; hex(S*.36); ctx.fill(); ctx.stroke(); ctx.fillStyle=col; ctx.beginPath(); ctx.arc(c,c,S*.06,0,7); ctx.fill(); }
+  else if (type==='VORDME'){ ctx.fillStyle=halo; ctx.fillRect(S*.12,S*.12,S*.76,S*.76); ctx.strokeRect(S*.12,S*.12,S*.76,S*.76); hex(S*.36); ctx.stroke(); ctx.fillStyle=col; ctx.beginPath(); ctx.arc(c,c,S*.06,0,7); ctx.fill(); }
+  else if (type==='DME'){ ctx.fillStyle=halo; ctx.fillRect(S*.18,S*.18,S*.64,S*.64); ctx.strokeRect(S*.18,S*.18,S*.64,S*.64); ctx.fillStyle=col; ctx.beginPath(); ctx.arc(c,c,S*.06,0,7); ctx.fill(); }
+  else if (type==='DOT'){ ctx.beginPath(); ctx.arc(c,c,S*.3,0,7); ctx.fill(); ctx.lineWidth=S*.12; ctx.strokeStyle=halo; ctx.stroke(); }
+}
+const symCache=new Map();
+function symbolTexture(type,col,fill){ const key=type+col+fill+theme; if(symCache.has(key)) return symCache.get(key);
+  const S=96, cv=document.createElement('canvas'); cv.width=cv.height=S; drawSymbol(cv.getContext('2d'),type,S,col,fill);
+  const tex=new THREE.CanvasTexture(cv); tex.colorSpace=THREE.SRGBColorSpace; symCache.set(key,tex); return tex; }
+function symbolSprite(type,col,fill,px){ const s=new THREE.Sprite(new THREE.SpriteMaterial({map:symbolTexture(type,col,fill), sizeAttenuation:false, depthTest:false, transparent:true})); s.renderOrder=15; return trackSprite(s,px,px); }
+const navSymType=p=>p.navType.includes('DME')?'VORDME':(p.navType==='VOR'?'VOR':'DME');
+
+/* ═════════════════════════════ 4. RELIEVE (DEM) ═════════════════════════════
+   Teselas Terrarium (zoom 7 ≈ 1,2 km/píxel): altura(m) = R·256 + G + B/256 − 32768.
+   Se descargan en el navegador, se decodifican y se construye una malla 3D solo sobre tierra. */
+const DEM_Z=7;
+const lon2x=(lon,z)=>(lon+180)/360*2**z;
+const lat2y=(lat,z)=>{ const r=lat*D2R; return (1-Math.log(Math.tan(r)+1/Math.cos(r))/Math.PI)/2*2**z; };
+const TX0=Math.floor(lon2x(BBOX.x0,DEM_Z)), TX1=Math.floor(lon2x(BBOX.x1,DEM_Z));
+const TY0=Math.floor(lat2y(BBOX.y1,DEM_Z)), TY1=Math.floor(lat2y(BBOX.y0,DEM_Z));
+const DEM_SRC=['https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png',
+               'https://elevation-tiles-prod.s3.amazonaws.com/terrarium/{z}/{x}/{y}.png'];
+let DEM=null, reliefMaxM=0;
+const loadImg=url=>new Promise((res,rej)=>{ const im=new Image(); im.crossOrigin='anonymous'; im.onload=()=>res(im); im.onerror=rej; im.src=url; });
+async function loadTile(x,y){ for (const s of DEM_SRC){ try { return await loadImg(s.replace('{z}',DEM_Z).replace('{x}',x).replace('{y}',y)); } catch(e){} } return null; }
+async function loadDEM(onProgress){
+  const nx=TX1-TX0+1, ny=TY1-TY0+1, W=nx*256, H=ny*256;
+  const cv=document.createElement('canvas'); cv.width=W; cv.height=H; const ctx=cv.getContext('2d',{willReadFrequently:true});
+  let done=0, fail=0; const jobs=[];
+  for (let x=TX0;x<=TX1;x++) for (let y=TY0;y<=TY1;y++)
+    jobs.push(loadTile(x,y).then(im=>{ if(im) ctx.drawImage(im,(x-TX0)*256,(y-TY0)*256); else fail++; onProgress(++done, nx*ny); }));
+  await Promise.all(jobs);
+  if (fail > nx*ny*0.3) return null;
+  let px; try { px=ctx.getImageData(0,0,W,H).data; } catch(e){ return null; }
+  const data=new Float32Array(W*H);
+  for (let i=0;i<W*H;i++){ const j=i*4; data[i]= px[j+3]===0 ? -1000 : px[j]*256+px[j+1]+px[j+2]/256-32768; }
+  return {W,H,data};
+}
+function demAt(lat,lon){ // elevación bilineal (m)
+  if (!DEM) return 0;
+  const x=(lon2x(lon,DEM_Z)-TX0)*256-.5, y=(lat2y(lat,DEM_Z)-TY0)*256-.5, W=DEM.W;
+  const x0=Math.max(0,Math.min(W-2,Math.floor(x))), y0=Math.max(0,Math.min(DEM.H-2,Math.floor(y)));
+  const fx=Math.min(1,Math.max(0,x-x0)), fy=Math.min(1,Math.max(0,y-y0)), d=DEM.data, i=y0*W+x0;
+  return (d[i]*(1-fx)+d[i+1]*fx)*(1-fy)+(d[i+W]*(1-fx)+d[i+W+1]*fx)*fy;
+}
+// Rampa hipsométrica (verde llanura → oliva → pardo → claro en cumbres)
+const RAMP=[[0,'#4c7a38'],[120,'#5b8a40'],[400,'#7a9a4f'],[900,'#9c9a5e'],[1500,'#a4855c'],[2200,'#b09479'],[2800,'#d3c6b4'],[3300,'#f3efe8']].map(([h,c])=>[h,new THREE.Color(c)]);
+const _c=new THREE.Color();
+function rampColor(h){ if (h<=RAMP[0][0]) return _c.copy(RAMP[0][1]);
+  for (let i=1;i<RAMP.length;i++) if (h<=RAMP[i][0]){ const [h0,c0]=RAMP[i-1],[h1,c1]=RAMP[i]; return _c.copy(c0).lerp(c1,(h-h0)/(h1-h0)); }
+  return _c.copy(RAMP.at(-1)[1]); }
+
+const terrainGroup=new THREE.Group(); scene.add(terrainGroup);   // escala Y = exageración del relieve
+let landMesh=null;
+const landMat=new THREE.MeshLambertMaterial({vertexColors:true, side:THREE.DoubleSide});
+function buildTerrain(){
+  if (!DEM) return;
+  if (landMesh){ terrainGroup.remove(landMesh); landMesh.geometry.dispose(); landMesh=null; }
+  const step=QUALITY[state.quality].step;
+  const nx=Math.round((BBOX.x1-BBOX.x0)/step)+1, ny=Math.round((BBOX.y1-BBOX.y0)/step)+1;
+  const H=new Float32Array(nx*ny);
+  for (let j=0;j<ny;j++){ const lat=BBOX.y0+j*step; for (let i=0;i<nx;i++) H[j*nx+i]=demAt(lat, BBOX.x0+i*step); }
+  const vmap=new Int32Array(nx*ny).fill(-1), pos=[], col=[], idx=[];
+  const vert=(i,j)=>{ const k=j*nx+i; if (vmap[k]>=0) return vmap[k];
+    const h=H[k], p=project(BBOX.y0+j*step, BBOX.x0+i*step);
+    pos.push(p.x, Math.max(h,-400)/NM, p.z); const c=rampColor(Math.max(h,0)); col.push(c.r,c.g,c.b);   // costa exacta donde h = 0
+    return vmap[k]=pos.length/3-1; };
+  for (let j=0;j<ny-1;j++) for (let i=0;i<nx-1;i++){
+    const a=j*nx+i, b=a+1, c=a+nx, d=c+1;
+    if (H[a]>0||H[b]>0||H[c]>0||H[d]>0){ const va=vert(i,j), vb=vert(i+1,j), vc=vert(i,j+1), vd=vert(i+1,j+1); idx.push(va,vb,vc, vb,vd,vc); }
+  }
+  const g=new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos,3));
+  g.setAttribute('color', new THREE.Float32BufferAttribute(col,3));
+  g.setIndex(new THREE.BufferAttribute(new Uint32Array(idx),1)); g.computeVertexNormals();
+  landMesh=new THREE.Mesh(g, landMat); landMesh.renderOrder=1; terrainGroup.add(landMesh);
+}
+function computeReliefMax(){ // cumbre más alta en la zona de Panamá (para colocar las capas por encima)
+  reliefMaxM=0; if (!DEM) return;
+  for (let lat=6.8; lat<=9.9; lat+=.02) for (let lon=-83.1; lon<=-77.2; lon+=.02) reliefMaxM=Math.max(reliefMaxM, demAt(lat,lon));
+}
+
+// ── Mar: batimetría + halo costero (shader con niebla) ──
+const oceanUni=THREE.UniformsUtils.merge([THREE.UniformsLib.fog, {tex:{value:null}, has:{value:0}, cShallow:{value:new THREE.Color()}, cDeep:{value:new THREE.Color()}, cGlow:{value:new THREE.Color()}, glowK:{value:.55}}]);
+// polygonOffset: empuja el mar hacia atrás en profundidad → la costa baja nunca "parpadea" contra el agua
+const oceanMat=new THREE.ShaderMaterial({ uniforms:oceanUni, fog:true, polygonOffset:true, polygonOffsetFactor:2, polygonOffsetUnits:8,
+  vertexShader:`#include <common>
+#include <fog_pars_vertex>
+varying vec2 vUv; void main(){ vUv=uv; vec4 mvPosition=modelViewMatrix*vec4(position,1.0); gl_Position=projectionMatrix*mvPosition;
+#include <fog_vertex>
+}`,
+  fragmentShader:`#include <common>
+#include <fog_pars_fragment>
+uniform sampler2D tex; uniform float has, glowK; uniform vec3 cShallow, cDeep, cGlow; varying vec2 vUv;
+void main(){
+  vec3 c = mix(cShallow, cDeep, .55);
+  if (has > .5){ vec4 t = texture2D(tex, vUv);
+    c = mix(cShallow, cDeep, smoothstep(.04, .8, t.r));
+    c = mix(c, cGlow, glowK * pow(smoothstep(.0, .85, t.g), 1.35)); }
+  gl_FragColor = vec4(c, 1.0);
+  #include <colorspace_fragment>
+  #include <fog_fragment>
+}`});
+let oceanMesh=null;
+const outerOcean=new THREE.Mesh(new THREE.PlaneGeometry(12000,12000).rotateX(-Math.PI/2), new THREE.MeshBasicMaterial({color:THEMES[theme].deep}));
+outerOcean.position.y=-0.6; outerOcean.material.depthWrite=false; outerOcean.renderOrder=-2; scene.add(outerOcean);   // fondo: se dibuja primero, sin pelear con el mar
+function boxBlur(src,W,H,r){ const tmp=new Float32Array(W*H), n=2*r+1;
+  for (let y=0;y<H;y++){ let s=0; const o=y*W; for (let x=-r;x<=r;x++) s+=src[o+Math.min(W-1,Math.max(0,x))];
+    for (let x=0;x<W;x++){ tmp[o+x]=s/n; s+=src[o+Math.min(W-1,x+r+1)]-src[o+Math.max(0,x-r)]; } }
+  for (let x=0;x<W;x++){ let s=0; for (let y=-r;y<=r;y++) s+=tmp[Math.min(H-1,Math.max(0,y))*W+x];
+    for (let y=0;y<H;y++){ src[y*W+x]=s/n; s+=tmp[Math.min(H-1,y+r+1)*W+x]-tmp[Math.max(0,y-r)*W+x]; } } }
+function buildOcean(){
+  if (oceanMesh){ scene.remove(oceanMesh); oceanMesh.geometry.dispose(); }
+  const st=.1, nx=Math.round((BBOX.x1-BBOX.x0)/st)+1, ny=Math.round((BBOX.y1-BBOX.y0)/st)+1, pos=[], uv=[], idx=[];
+  const W=(TX1-TX0+1)*256, H=(TY1-TY0+1)*256;
+  for (let j=0;j<ny;j++) for (let i=0;i<nx;i++){ const lat=BBOX.y0+j*st, lon=BBOX.x0+i*st, p=project(lat,lon);
+    pos.push(p.x,0,p.z); uv.push((lon2x(lon,DEM_Z)-TX0)*256/W, 1-(lat2y(lat,DEM_Z)-TY0)*256/H); }
+  for (let j=0;j<ny-1;j++) for (let i=0;i<nx-1;i++){ const a=j*nx+i; idx.push(a,a+1,a+nx, a+1,a+nx+1,a+nx); }
+  const g=new THREE.BufferGeometry(); g.setAttribute('position',new THREE.Float32BufferAttribute(pos,3)); g.setAttribute('uv',new THREE.Float32BufferAttribute(uv,2)); g.setIndex(idx);
+  oceanMesh=new THREE.Mesh(g, oceanMat); oceanMesh.renderOrder=-1; scene.add(oceanMesh);
+  if (DEM){
+    const {W:w,H:h,data}=DEM, mask=new Float32Array(w*h); for (let i=0;i<w*h;i++) mask[i]=data[i]>0?1:0;
+    boxBlur(mask,w,h,5); boxBlur(mask,w,h,5); boxBlur(mask,w,h,4);
+    const t=new Uint8Array(w*h*4);
+    for (let y=0;y<h;y++) for (let x=0;x<w;x++){ const i=y*w+x, o=((h-1-y)*w+x)*4;
+      t[o]=data[i]<0 ? Math.min(255, Math.sqrt(-data[i]/5500)*255) : 0; t[o+1]=Math.min(255,mask[i]*255*1.6); t[o+3]=255; }
+    const tex=new THREE.DataTexture(t,w,h,THREE.RGBAFormat); tex.magFilter=tex.minFilter=THREE.LinearFilter; tex.needsUpdate=true;
+    oceanUni.tex.value?.dispose?.(); oceanUni.tex.value=tex; oceanUni.has.value=1;
+  }
+}
+
+// ── Fronteras y contorno FIR adaptados al relieve; tierra plana de respaldo ──
+const refGroup={grid:new THREE.Group(), fallback:new THREE.Group()};
+scene.add(refGroup.grid, refGroup.fallback);
+const borderMat=new THREE.LineBasicMaterial({color:THEMES[theme].border, transparent:true, opacity:.55});
+const firMat=new THREE.LineDashedMaterial({color:THEMES[theme].fir, dashSize:6, gapSize:4, transparent:true, opacity:.9});
+let bordersObj=null, firObj=null, firLabel=null;
+function densify(ll, step=.04){ const out=[]; for (let i=0;i<ll.length-1;i++){ const [a,b]=[ll[i],ll[i+1]], n=Math.max(1,Math.ceil(Math.hypot(b[0]-a[0],b[1]-a[1])/step)); for (let k=0;k<n;k++) out.push([a[0]+(b[0]-a[0])*k/n, a[1]+(b[1]-a[1])*k/n]); } out.push(ll.at(-1)); return out; }
+const drapeY=(lat,lon,off)=>Math.max(demAt(lat,lon),0)/NM+off;   // altura sin exagerar (el grupo se escala)
+function buildDraped(){
+  if (bordersObj){ terrainGroup.remove(bordersObj); bordersObj.geometry.dispose(); }
+  const seg=[];
+  for (const ln of GEO.borders){ const d=densify(ln); for (let i=0;i<d.length-1;i++){ const [a,b]=[d[i],d[i+1]];
+    seg.push(project(a[1],a[0],drapeY(a[1],a[0],.02)), project(b[1],b[0],drapeY(b[1],b[0],.02))); } }
+  bordersObj=new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(seg), borderMat); bordersObj.renderOrder=3; terrainGroup.add(bordersObj);
+  if (firObj){ terrainGroup.remove(firObj); firObj.geometry.dispose(); }
+  const ring=DATA.firBoundary.map(p=>typeof p==='string'?PTS[p]:p).map(p=>[p.lon,p.lat]); ring.push(ring[0]);
+  const v=densify(ring,.05).map(([lo,la])=>project(la,lo,drapeY(la,lo,.03)));
+  firObj=new THREE.Line(new THREE.BufferGeometry().setFromPoints(v), firMat); firObj.computeLineDistances(); firObj.renderOrder=3; terrainGroup.add(firObj);
+}
+function buildFallbackLand(){ // mapa plano si no hay relieve
+  refGroup.fallback.clear();
+  const flat={side:THREE.DoubleSide, depthTest:false, depthWrite:false};   // capas planas: se ordenan por renderOrder, no por profundidad
+  const m1=new THREE.MeshBasicMaterial({color:THEMES[theme].land, ...flat}), m2=new THREE.MeshBasicMaterial({color:THEMES[theme].landPA, ...flat});
+  for (const c of GEO.polys) for (const ring of c.r){
+    const shape=new THREE.Shape(ring.map(([lo,la])=>{ const v=project(la,lo); return new THREE.Vector2(v.x,-v.z); }));
+    const m=new THREE.Mesh(new THREE.ShapeGeometry(shape).rotateX(-Math.PI/2), c.n==='Panama'?m2:m1); m.position.y=.01; m.renderOrder=1; refGroup.fallback.add(m); }
+  const seg=[]; for (const ln of GEO.coast) for (let i=0;i<ln.length-1;i++) seg.push(project(ln[i][1],ln[i][0],.03), project(ln[i+1][1],ln[i+1][0],.03));
+  const coast=new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(seg), new THREE.LineBasicMaterial({color:0x7d97b5, depthTest:false, depthWrite:false})); coast.renderOrder=2; refGroup.fallback.add(coast);
+}
+// Cuadrícula de 1° (sobre el mar; el relieve la tapa)
+const gridMat=new THREE.LineBasicMaterial({color:THEMES[theme].grid, transparent:true, opacity:.55});
+const gridLabels=[];
+(function buildGrid(){
+  const pts=[];
+  for (let lo=-86;lo<=-74;lo++) for (let la=3;la<16;la+=.25) pts.push(project(la,lo,.2), project(la+.25,lo,.2));
+  for (let la=3;la<=16;la++) for (let lo=-86;lo<-74;lo+=.25) pts.push(project(la,lo,.2), project(la,lo+.25,.2));
+  const l=new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(pts), gridMat); l.renderOrder=1; refGroup.grid.add(l);
+  for (let lo=-86;lo<=-74;lo++){ const s=textSprite(`${-lo}°W`,{color:THEMES[theme].gridLbl,size:11,weight:400,anchor:'center'}); s.position.copy(project(3.0,lo)); refGroup.grid.add(s); gridLabels.push(s); }
+  for (let la=4;la<=16;la++){ const s=textSprite(`${la}°N`,{color:THEMES[theme].gridLbl,size:11,weight:400,anchor:'center'}); s.position.copy(project(la,-86.0)); refGroup.grid.add(s); gridLabels.push(s); }
+  firLabel=textSprite('FIR PANAMÁ · MPZL',{color:'#'+new THREE.Color(THEMES[theme].fir).getHexString(),size:11,weight:400,anchor:'center'});
+  firLabel.position.copy(project(4.1,-80.6,.1)); scene.add(firLabel);
+})();
+
+/* ═════════════════════════════ 5. PUNTOS Y RUTAS ═════════════════════════════ */
+const labelReg=[];                      // etiquetas sujetas a anti-solape
+function regLabel(s, prio){ s._prio=prio; s._base=1; s._dec=1; s.material.opacity=0; labelReg.push(s); return s; }
+const fixGroup=new THREE.Group(); scene.add(fixGroup);
+const fixObjs={};
+function buildFixes(){
+  for (const id in fixObjs){ const f=fixObjs[id]; [f.sym,f.lbl].forEach(s=>{ untrack(s); const i=labelReg.indexOf(s); if(i>=0) labelReg.splice(i,1); }); }
+  fixGroup.clear();
+  for (const id in PTS){
+    const p=PTS[id], pos=project(p.lat,p.lon), isNav=p.kind==='NAV', col=isNav?THEMES[theme].navCol:THEMES[theme].fixCol;
+    const sym=isNav ? symbolSprite(navSymType(p),col,false,22) : symbolSprite('WPT',col,!!p.compulsory,15);
+    sym.position.copy(pos); sym.userData={pointId:id};
+    const lbl=textSprite(isNav?`${p.name} ${id}`:id, {color:col, size:isNav?12:11, weight:isNav?700:400});
+    lbl.position.copy(pos); lbl.userData={pointId:id, isLabel:true};
+    regLabel(lbl, isNav?70:(p.compulsory?50:40));
+    fixGroup.add(sym,lbl);
+    fixObjs[id]={sym,lbl,pos,isNav,other:isNav&&p.routes.length===0, hM:Math.max(demAt(p.lat,p.lon),0)};
+  }
+}
+const routeObjs={}, pickables=[];
+const FL_CAP=410;
+function buildRoutes(){
+  for (const r of ROUTES){
+    const color=routeColor(r), g=new THREE.Group(); scene.add(g);
+    const pts=r.points.map(id=>project(PTS[id].lat,PTS[id].lon));
+    const geo=new LineGeometry(); geo.setPositions(pts.flatMap(v=>[v.x,0,v.z]));
+    const mat=new LineMaterial({color, linewidth:3, transparent:true, opacity:.95, worldUnits:false});
+    const line=new Line2(geo,mat); line.computeLineDistances(); line.userData={routeId:r.id}; line.renderOrder=6; g.add(line);
+    const nodes=pts.map((v,i)=>{ const s=new THREE.Sprite(new THREE.SpriteMaterial({map:symbolTexture('DOT','#ffffff',true), color, sizeAttenuation:false, depthTest:false, transparent:true}));
+      trackSprite(s,9,9); s.renderOrder=12; s.position.set(v.x,0,v.z); s.userData={pointId:r.points[i], routeId:r.id}; g.add(s); return s; });
+    const dropG=new THREE.Group();
+    const dm=new THREE.LineDashedMaterial({color, dashSize:.05, gapSize:.045, transparent:true, opacity:.5});
+    const dl=new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(pts.flatMap(v=>[new THREE.Vector3(v.x,0,v.z),new THREE.Vector3(v.x,-1,v.z)])), dm);
+    dl.computeLineDistances(); dropG.add(dl); g.add(dropG);
+    const cv=[]; for (let i=0;i<pts.length-1;i++){ const a=pts[i], b=pts[i+1]; cv.push(a.x,0,a.z,b.x,0,b.z,b.x,1,b.z, a.x,0,a.z,b.x,1,b.z,a.x,1,a.z); }
+    const cg=new THREE.BufferGeometry(); cg.setAttribute('position',new THREE.Float32BufferAttribute(cv,3));
+    const curtain=new THREE.Mesh(cg,new THREE.MeshBasicMaterial({color, transparent:true, opacity:0, side:THREE.DoubleSide, depthWrite:false})); curtain.visible=false; g.add(curtain);
+    let li=0; r.legs.forEach((l,i)=>{ if(l.dist>r.legs[li].dist) li=i; });
+    const mid=pts[li].clone().lerp(pts[li+1],.5);
+    const lbl=textSprite(r.id,{color:'#'+color.getHexString(), size:13, weight:700, anchor:'center'});
+    lbl.position.set(mid.x,0,mid.z); lbl.userData={routeId:r.id, isLabel:true}; regLabel(lbl,65); g.add(lbl);
+    // Contorno del FIR a la altura de la capa (solo se muestra uno por capa)
+    firLayerGeos();
+    const layer=new THREE.Group(); layer.visible=false;
+    const layerLine=new THREE.Line(FIR_RING_GEO, new THREE.LineBasicMaterial({color, transparent:true, opacity:.6, depthWrite:false})); layerLine.renderOrder=4;
+    const layerFill=new THREE.Mesh(FIR_FILL_GEO, new THREE.MeshBasicMaterial({color, transparent:true, opacity:.035, side:THREE.DoubleSide, depthWrite:false})); layerFill.renderOrder=2;
+    const layerLbl=textSprite(r.id,{color:'#'+color.getHexString(), size:11, weight:700, anchor:'right', offset:8});
+    layerLbl.position.copy(FIR_LBL_POS); regLabel(layerLbl,90);
+    layer.add(layerFill, layerLine, layerLbl); g.add(layer);
+    pickables.push(line, ...nodes, lbl);
+    routeObjs[r.id]={r,g,line,mat,nodes,dropG,dm,curtain,lbl,color,pts,visible:true,curH:2,tgtH:2,curtainA:0,layer,layerLine,layerFill,layerLbl,layerKey:r.id};
+  }
+}
+
+// Geometría compartida del contorno FIR para las capas
+let FIR_RING_GEO=null, FIR_FILL_GEO=null, FIR_LBL_POS=null;
+function firLayerGeos(){
+  if (FIR_RING_GEO) return;
+  const ring=DATA.firBoundary.map(p=>typeof p==='string'?PTS[p]:p).map(p=>[p.lon,p.lat]); ring.push(ring[0]);
+  const v=densify(ring,.1).map(([lo,la])=>project(la,lo,0));
+  FIR_RING_GEO=new THREE.BufferGeometry().setFromPoints(v);
+  FIR_FILL_GEO=new THREE.ShapeGeometry(new THREE.Shape(v.map(p=>new THREE.Vector2(p.x,-p.z)))).rotateX(-Math.PI/2);
+  FIR_LBL_POS=project(4.528,-82.9167);   // esquina SW del FIR: columna de nombres de capa
+}
+function setLayerLabel(o, text){ if (o.layerLbl._t.text===text) return; o.layerLbl._t.text=text; redrawText(o.layerLbl); }
+
+// Extras de la ruta seleccionada: halo, etiquetas de tramo y tramo resaltado
+const selFx={group:null};
+function clearSelFx(){ if(!selFx.group) return; selFx.group.traverse(o=>{ if(o.isSprite){ untrack(o); const i=labelReg.indexOf(o); if(i>=0) labelReg.splice(i,1); o.material.map?.dispose(); } o.geometry?.dispose?.(); }); selFx.group.parent?.remove(selFx.group); selFx.group=null; }
+function buildSelFx(id){
+  clearSelFx(); const o=routeObjs[id], r=o.r, g=new THREE.Group(); o.g.add(g); selFx.group=g;
+  const geo=new LineGeometry(); geo.setPositions(o.pts.flatMap(v=>[v.x,0,v.z]));
+  const halo=new Line2(geo,new LineMaterial({color:o.color, linewidth:14, transparent:true, opacity:.22, worldUnits:false, depthWrite:false})); halo.renderOrder=5; g.add(halo); resizeLineMat(halo.material);
+  const hlGeo=new LineGeometry(); hlGeo.setPositions([0,0,0,1,0,0]);
+  const hl=new Line2(hlGeo,new LineMaterial({color:0xffffff, linewidth:7, transparent:true, opacity:.95, worldUnits:false})); hl.visible=false; hl.renderOrder=7; g.add(hl); resizeLineMat(hl.material);
+  selFx.hl=hl;
+  if ($('cLegLbl').checked) r.legs.forEach((l,i)=>{
+    const m=o.pts[i].clone().lerp(o.pts[i+1],.5);
+    const txt=`${f1(l.dist)} NM${l.fwd?' · '+l.fwd:''}`;
+    const s=textSprite(txt,{color:'#ffffff', size:11, weight:700, anchor:'center', bg:'rgba('+[o.color.r,o.color.g,o.color.b].map(v=>Math.round(Math.pow(v,1/2.2)*255*.55)).join(',')+',.92)'});
+    s.position.set(m.x,0,m.z); s.userData={routeId:id, isLabel:true}; regLabel(s,150); g.add(s);
+  });
+  // nombres de los puntos (incl. FIR BDRY) viajan con la ruta, en su capa
+  r.points.forEach((pid,i)=>{ const p=PTS[pid], isNav=p.kind==='NAV';
+    const s=textSprite(isNav?`${p.name} ${pid}`:(p.firBdry?`${pid} · FIR BDRY`:pid), {color:isNav?THEMES[theme].navCol:THEMES[theme].fixCol, size:isNav?12:11, weight:700});
+    s.position.set(o.pts[i].x,0,o.pts[i].z); s.userData={pointId:pid, routeId:id, isLabel:true}; regLabel(s,160); g.add(s); });
+}
+function showLegHL(i){
+  state.hlLeg=i; if (!selFx.hl) return;
+  if (i==null || !state.sel){ selFx.hl.visible=false; return; }
+  const o=routeObjs[state.sel], a=o.pts[i], b=o.pts[Math.min(i+1,o.pts.length-1)];
+  if (i>=o.pts.length-1){ selFx.hl.visible=false; return; }
+  selFx.hl.geometry.setPositions([a.x,0,a.z,b.x,0,b.z]); selFx.hl.computeLineDistances(); selFx.hl.visible=true;
+}
+
+
+/* ── FIR adyacentes: Kingston, Barranquilla, Bogotá, Centroamericana ──
+   Cada una: relleno de su zona, límite común con Panamá (coloreado y adaptado al relieve),
+   una pared vertical tenue sobre ese límite (separa las FIR en 3D) y su nombre. */
+const ADJ = DATA.adjacentFirs || [];
+const resolveP = p => typeof p==='string' ? PTS[p] : p;
+const adjOfPoint = {};                 // punto FIR BDRY → FIR vecina
+for (const a of ADJ) for (const p of a.border) if (typeof p==='string') adjOfPoint[p]=a.id;
+const adjObjs = {};
+const adjGroup=new THREE.Group(); scene.add(adjGroup);          // rellenos, paredes y etiquetas
+const adjDrape=new THREE.Group(); terrainGroup.add(adjDrape);  // límites sobre el relieve
+function buildAdjacent(){
+  for (const id in adjObjs){ const o=adjObjs[id]; untrack(o.lbl); const i=labelReg.indexOf(o.lbl); if(i>=0) labelReg.splice(i,1); const k=pickables.indexOf(o.lbl); if(k>=0) pickables.splice(k,1); o.lbl.material.map?.dispose(); delete adjObjs[id]; }
+  adjGroup.clear(); adjDrape.clear();
+  for (const a of ADJ){
+    const col=new THREE.Color(a.color), border=a.border.map(resolveP);
+    const ring=[...border, ...(a.innerJoin||[]), ...a.outer].map(p=>[p.lon,p.lat]); ring.push(ring[0]);
+    const v=densify(ring,.1).map(([lo,la])=>project(la,lo,0));
+    const fill=new THREE.Mesh(new THREE.ShapeGeometry(new THREE.Shape(v.map(p=>new THREE.Vector2(p.x,-p.z)))).rotateX(-Math.PI/2),
+      new THREE.MeshBasicMaterial({color:col, transparent:true, opacity:.10, side:THREE.DoubleSide, depthWrite:false}));
+    fill.position.y=.25; fill.renderOrder=1.6; adjGroup.add(fill);
+    // límite común (sobre el relieve)
+    const bl=densify(border.map(p=>[p.lon,p.lat]),.03).map(([lo,la])=>project(la,lo,drapeY(la,lo,.06)));
+    const lg=new LineGeometry(); lg.setPositions(bl.flatMap(p=>[p.x,p.y,p.z]));
+    // límite común remarcado: línea más gruesa + resplandor
+    const lm=new LineMaterial({color:col, linewidth:5, transparent:true, opacity:1, worldUnits:false}); resizeLineMat(lm);
+    const line=new Line2(lg,lm); line.computeLineDistances(); line.renderOrder=3; adjDrape.add(line);
+    const gm=new LineMaterial({color:col, linewidth:10, transparent:true, opacity:.22, worldUnits:false, depthWrite:false}); resizeLineMat(gm);
+    const glow=new Line2(lg,gm); glow.renderOrder=2.9; adjDrape.add(glow);
+    // pared vertical con degradado (altura unitaria; se escala en el bucle)
+    const wp=[], wc=[], bb=densify(border.map(p=>[p.lon,p.lat]),.1).map(([lo,la])=>project(la,lo,0));
+    for (let i=0;i<bb.length-1;i++){ const p=bb[i], q=bb[i+1];
+      wp.push(p.x,0,p.z, q.x,0,q.z, q.x,1,q.z,  p.x,0,p.z, q.x,1,q.z, p.x,1,p.z);
+      wc.push(...[0,0,1,0,1,1].flatMap(t=>[col.r,col.g,col.b, t?0:.28])); }
+    const wg=new THREE.BufferGeometry(); wg.setAttribute('position',new THREE.Float32BufferAttribute(wp,3)); wg.setAttribute('color',new THREE.Float32BufferAttribute(wc,4));
+    const wall=new THREE.Mesh(wg,new THREE.MeshBasicMaterial({vertexColors:true, transparent:true, side:THREE.DoubleSide, depthWrite:false})); wall.renderOrder=4; adjGroup.add(wall);
+    // nombre: más pequeño, color pálido (mezclado con blanco) y semitransparente
+    const pale='#'+col.clone().lerp(new THREE.Color(theme==='light'?0x334155:0xffffff), .45).getHexString();
+    const lbl=textSprite(`${a.name.toUpperCase()} · ${a.id}`,{color:pale, size:10.5, weight:700, anchor:'center'});
+    lbl.position.copy(project(a.label.lat,a.label.lon,3)); lbl.userData={adjId:a.id, isLabel:true}; regLabel(lbl,88); adjGroup.add(lbl);
+    pickables.push(lbl);
+    adjObjs[a.id]={a,fill,line,lm,gm,wall,lbl};
+  }
+  applyAdjHighlight();
+}
+// FIR vecinas en las que entra/sale una ruta (por sus puntos extremos FIR BDRY)
+const routeAdj = r => [r.points[0], r.points.at(-1)].filter(p=>adjOfPoint[p]).map(p=>({p, a:ADJ.find(x=>x.id===adjOfPoint[p])}));
+function applyAdjHighlight(){
+  const keys = state.selAdj ? new Set([state.selAdj]) : state.sel ? new Set(routeAdj(routeObjs[state.sel].r).map(x=>x.a.id)) : null;
+  for (const id in adjObjs){ const o=adjObjs[id], on=!keys||keys.has(id), strong=keys&&on;
+    o.fill.material.opacity = strong?.16:(on?.08:.03); o.lm.opacity = on?1:.35; o.lm.linewidth = strong?6.5:4.5; o.gm.opacity = strong?.38:(on?.22:.06);
+    o.lbl._base = strong?.9:(on?.6:.25); o.wall.visible=on; }
+}
+
+// Regla vertical (modo FL)
+const ruler=new THREE.Group(); scene.add(ruler);
+function buildRuler(){
+  ruler.traverse(o=>{ if(o.isSprite){ untrack(o); const i=labelReg.indexOf(o); if(i>=0) labelReg.splice(i,1); } }); ruler.clear();
+  const base=project(13.6,-85.2), m=new THREE.LineBasicMaterial({color:0x8aa3c0});
+  const mk=(fl,lab)=>{ const y=ftToNM(fl*100)*state.exag;
+    ruler.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(base.x,y,base.z),new THREE.Vector3(base.x+25,y,base.z)]),m));
+    const s=textSprite(lab,{color:'#9fb5cf',size:11,weight:400}); s.position.set(base.x+25,y,base.z); regLabel(s, fl===195?80:fl===410?75:30); ruler.add(s); return y; };
+  const top=mk(FL_CAP,'FL410 · tope RVSM (referencia)'); mk(290,'FL290 · inicio RVSM'); mk(195,'FL195 · límite inferior');
+  ruler.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(base.x,0,base.z),new THREE.Vector3(base.x,top,base.z)]),m));
+}
+
+/* ═════════════════════════════ 6. ALTURAS, VISIBILIDAD Y RESALTADO ═════════════════════════════ */
+let curRelief=.001;
+const reliefOn=()=>$('cRelief').checked && !!DEM;
+const tgtRelief=()=>!reliefOn() ? .001 : (state.mode==='fl' ? state.exag : state.relief);
+const reliefTopNM=()=>reliefOn() ? reliefMaxM/NM*tgtRelief() : 0;
+const planeH=()=>reliefTopNM()+1.5;
+function computeTargets(){
+  const vis=ROUTES.filter(r=>routeObjs[r.id].visible), fams=[...new Set(vis.map(r=>r.family))], base=reliefTopNM()+4;
+  vis.forEach((r,i)=>{ const o=routeObjs[r.id];
+    o.tgtH = state.mode==='plane' ? planeH() : state.mode==='layers' ? base+state.spacing*(state.groupBy==='family'?fams.indexOf(r.family):i) : ftToNM(parseInt(r.lower.replace(/\D/g,''))*100)*state.exag; });
+  // un contorno FIR por capa: el de la primera ruta visible de cada capa
+  const rep={}, byFam=state.groupBy==='family';
+  for (const r of vis){ const o=routeObjs[r.id]; o.layerKey=byFam?r.family:r.id; if(!(o.layerKey in rep)) rep[o.layerKey]=r.id; }
+  const showLayers = state.mode==='layers' && $('cFirLayers').checked;
+  for (const id in routeObjs){ const o=routeObjs[id], r=o.r, show=showLayers && o.visible && rep[o.layerKey]===id;
+    o.layer.visible=show;
+    if (show){ const c=byFam?new THREE.Color(famCss(r.family)):o.color; o.layerLine.material.color.copy(c); o.layerFill.material.color.copy(c); const hx='#'+c.getHexString(); if (o.layerLbl._t.opts.color!==hx){ o.layerLbl._t.opts.color=hx; o.layerLbl._t.text=''; } }
+    if (show) setLayerLabel(o, byFam ? `FIR · ${FAMILIES[r.family].name.toUpperCase()} (${r.family}) · ${vis.filter(x=>x.family===r.family).length} rutas` : `FIR · ${r.id}`); }
+  if (typeof applyLayerHighlight==='function') applyLayerHighlight();
+}
+function applyLayerHighlight(){
+  const keys = state.sel ? new Set([routeObjs[state.sel].layerKey]) : (state.selPoint ? new Set(PTS[state.selPoint].routes.map(id=>routeObjs[id].layerKey)) : null);
+  for (const id in routeObjs){ const o=routeObjs[id], on=!keys||keys.has(o.layerKey), strong=keys&&on;
+    o.layerLine.material.opacity = strong?.95:(on?.55:.07); o.layerFill.material.opacity = strong?.07:(on?.03:.008); o.layerLbl._base = on?1:.15; o.layerLbl._prio = strong?155:90; }
+}
+function setMode(m){
+  state.mode=m; computeTargets();
+  document.querySelectorAll('#modeSeg button').forEach(b=>b.classList.toggle('on',b.dataset.m===m));
+  $('ctlLayers').style.display = m==='layers'?'':'none';
+  $('ctlExag').style.display = m==='fl'?'':'none';
+  $('ctlRelief').style.display = m==='fl'?'none':'';
+  if (m==='fl') buildRuler(); ruler.visible=m==='fl';
+}
+function applyVisibility(){
+  for (const id in routeObjs){ const o=routeObjs[id]; o.g.visible=o.visible; o.lbl.visible=$('cLblRts').checked; }
+  for (const id in fixObjs){ const f=fixObjs[id], p=PTS[id];
+    const v = p.kind==='NAV' ? $('cNavOther').checked : p.routes.some(rid=>routeObjs[rid].visible);   // todas las VOR/DME juntas
+    f.sym.visible=v; f.lbl.visible=v && $('cLblPts').checked; }
+  computeTargets(); refreshList();
+}
+function applyHighlight(){
+  if (state.sel||state.selPoint) state.selAdj=null;
+  const sel=state.sel, sp=state.selPoint, thru=sp?new Set(PTS[sp].routes):null;
+  for (const id in routeObjs){ const o=routeObjs[id];
+    const on = sel ? id===sel : (thru ? thru.has(id) : true), strong=(sel&&id===sel)||(thru&&thru.has(id));
+    o.mat.opacity = on?1:(sel||thru?.1:.95); o.mat.linewidth = strong?5:(on?3:2);
+    o.nodes.forEach(n=>n.material.opacity=on?1:.12);
+    o.lbl._base = on?1:.12; o.lbl._prio = strong?140:65; o.dm.opacity = on?.55:.05; o.curtain.userData.dim=!on;
+  }
+  const active = sel ? new Set(routeObjs[sel].r.points) : (thru ? new Set([sp,...[...thru].flatMap(r=>routeObjs[r].r.points)]) : null);
+  for (const id in fixObjs){ const f=fixObjs[id], on=!active||active.has(id);
+    f.sym.material.opacity = on?1:.2; f.lbl._base = on ? (sel && routeObjs[sel].r.points.includes(id) ? 0 : 1) : 0;
+    f.lbl._prio = (on&&active?100:0) + (f.isNav?70:(PTS[id].compulsory?50:40)) + (id===sp?60:0);
+    const base=f.isNav?22:15; f.sym._sz.w=f.sym._sz.h=base*(id===sp?1.7:1); sizeSprite(f.sym._sz); }
+  document.querySelectorAll('.ritem').forEach(el=>el.classList.toggle('sel',el.dataset.id===sel));
+  if (sel) buildSelFx(sel); else clearSelFx();
+  applyLayerHighlight(); applyAdjHighlight();
+}
+// Anti-solape de etiquetas (greedy por prioridad, en espacio de pantalla)
+const _v=new THREE.Vector3();
+function declutter(){
+  const on=$('cDeclutter').checked, W=renderer.domElement.clientWidth, H=renderer.domElement.clientHeight, items=[];
+  for (const s of labelReg){
+    let vis=s.visible; for (let p=s.parent; p && vis; p=p.parent) vis=p.visible;
+    if (!vis || s._base<.05){ s._dec=0; continue; }
+    if (!on){ s._dec=1; continue; }
+    s.getWorldPosition(_v).project(camera);
+    if (_v.z>1||Math.abs(_v.x)>1.2||Math.abs(_v.y)>1.2){ s._dec=0; continue; }
+    const x=(_v.x+1)/2*W, y=(1-_v.y)/2*H, w=s._sz.w, h=s._sz.h, cx=s.center.x, cy=s.center.y;
+    items.push({s, p:s._prio+(s._base>.9?0:-200), r:[x-cx*w+2, y-(1-cy)*h+2, x+(1-cx)*w-2, y+cy*h-2]});
+  }
+  if (!on) return;
+  items.sort((a,b)=>b.p-a.p); const acc=[];
+  for (const it of items){ const [l,t,r,b]=it.r; let ok=true;
+    for (const q of acc){ if (l<q[2]&&r>q[0]&&t<q[3]&&b>q[1]){ ok=false; break; } }
+    it.s._dec=ok?1:0; if (ok) acc.push(it.r); }
+}
+
+/* ═════════════════════════════ 7. CÁMARA: zona visible y encuadre ═════════════════════════════
+   La ficha inferior y el panel lateral tapan parte del lienzo. Con setViewOffset se desplaza el
+   centro óptico al centro del área libre, y el encuadre se calcula con el tamaño de esa área. */
+const view={cx:0, cy:0, tcx:0, tcy:0};
+function insets(){
+  const top=$('top').getBoundingClientRect().bottom;
+  const dr=$('drawer'), left=(!isMobile() && !dr.classList.contains('closed')) ? dr.getBoundingClientRect().right : 0;
+  const sh=$('sheet'), bottom=sh.classList.contains('open') ? sh.getBoundingClientRect().height : 0;
+  return {top, left, bottom, right:0};
+}
+function updateInsets(){
+  const W=innerWidth, H=innerHeight, I=insets();
+  view.tcx=(I.left+W)/2-W/2; view.tcy=(I.top+(H-I.bottom))/2-H/2;
+  document.documentElement.style.setProperty('--inset-left', (isMobile()?0:I.left)+'px');
+  document.documentElement.style.setProperty('--inset-bottom', I.bottom+'px');
+  return I;
+}
+function applyViewOffset(){ const W=innerWidth, H=innerHeight; camera.setViewOffset(W,H,-view.cx,-view.cy,W,H); }
+let fly=null;
+function flyTo(target, dist, dir){
+  const d=(dir||camera.position.clone().sub(controls.target).normalize()).clone();
+  fly={t:0, p0:camera.position.clone(), t0:controls.target.clone(), p1:target.clone().add(d.multiplyScalar(dist)), t1:target.clone()};
+}
+function obliqueDir(polarDeg=48){ const az=controls.getAzimuthalAngle(), ph=polarDeg*D2R; return new THREE.Vector3(Math.sin(ph)*Math.sin(az), Math.cos(ph), Math.sin(ph)*Math.cos(az)); }
+function fitDistance(radius){
+  const I=insets(), W=innerWidth, H=innerHeight, t=Math.tan(camera.fov*D2R/2);
+  const tv=t*Math.max(.25,(H-I.top-I.bottom)/H), th=t*camera.aspect*Math.max(.25,(W-I.left)/W);
+  return radius/Math.min(tv,th)*1.08;
+}
+function focusRoute(id){
+  updateInsets(); const o=routeObjs[id];
+  const pts=o.pts.map(v=>v.clone().setY(o.tgtH)), box=new THREE.Box3().setFromPoints(pts);
+  const c=box.getCenter(new THREE.Vector3()), r=Math.max(40, pts.reduce((m,p)=>Math.max(m,p.distanceTo(c)),0));
+  flyTo(c, Math.max(120, fitDistance(r)), obliqueDir(42));
+}
+function focusPoint(id){ updateInsets(); const f=fixObjs[id]; flyTo(f.sym.getWorldPosition(new THREE.Vector3()), 230); }
+function homeView(){ const tgt=project(8.7,-80.0, 20), dir=new THREE.Vector3(-.12,.62,1).normalize(); return {tgt, pos:tgt.clone().add(dir.multiplyScalar(isMobile()?1350:900))}; }
+function viewTop(){ fly={t:0,p0:camera.position.clone(),t0:controls.target.clone(),p1:new THREE.Vector3(controls.target.x,1000,controls.target.z+1),t1:controls.target.clone().setY(0)}; }
+function viewSide(){ const h=Math.max(...Object.values(routeObjs).map(o=>o.tgtH))/2; fly={t:0,p0:camera.position.clone(),t0:controls.target.clone(),p1:new THREE.Vector3(0,h+40,1000),t1:new THREE.Vector3(0,h,0)}; }
+function viewReset(){ const h=homeView(); fly={t:0,p0:camera.position.clone(),t0:controls.target.clone(),p1:h.pos,t1:h.tgt}; }
+function viewNorth(){ const d=camera.position.distanceTo(controls.target), ph=Math.acos(Math.max(-1,Math.min(1,(camera.position.y-controls.target.y)/d)));
+  fly={t:0,p0:camera.position.clone(),t0:controls.target.clone(),p1:controls.target.clone().add(new THREE.Vector3(0,Math.cos(ph),Math.sin(ph)).multiplyScalar(d)),t1:controls.target.clone()}; }
+
+/* ═════════════════════════════ 8. INTERFAZ ═════════════════════════════ */
+// Panel lateral
+function setDrawer(open){
+  $('drawer').classList.toggle('closed',!open);
+  $('backdrop').style.display = open&&isMobile() ? 'block' : 'none';
+  setTimeout(updateInsets, 340); updateInsets();
+}
+function buildList(){
+  const box=$('rlist'); box.innerHTML='';
+  const fc=$('famChips'); fc.innerHTML='';
+  for (const fam in FAMILIES){ if(!famIdx[fam]) continue;
+    const ch=document.createElement('button'); ch.className='famchip'; ch.dataset.f=fam; ch.title=`Mostrar/ocultar familia ${FAMILIES[fam].name}`;
+    ch.innerHTML=`<i style="background:${famCss(fam)}"></i>${fam.slice(1)} · ${FAMILIES[fam].name}`;
+    ch.onclick=()=>{ const ids=famIdx[fam], anyOn=ids.some(id=>routeObjs[id].visible); ids.forEach(id=>routeObjs[id].visible=!anyOn); if(!anyOn===false&&ids.includes(state.sel)) closeSheet(); applyVisibility(); };
+    fc.appendChild(ch);
+    const h=document.createElement('div');
+    h.innerHTML=`<div class="fam-h"><i style="background:${famCss(fam)}"></i>${FAMILIES[fam].name} (${fam}) · ${FAMILIES[fam].kind}</div>`;
+    for (const id of famIdx[fam]){ const r=routeObjs[id].r;
+      const el=document.createElement('div'); el.className='ritem'; el.dataset.id=id;
+      el.innerHTML=`<input type="checkbox" checked aria-label="Mostrar ${id}"><i class="bar" style="background:#${routeObjs[id].color.getHexString()}"></i><b>${id}</b><span>${r.points[0]} → ${r.points.at(-1)} · ${f1(r.total)} NM</span>${r.warnCount?`<em title="${r.warnCount} dato(s) pendiente(s) de verificar">⚠</em>`:'<em></em>'}`;
+      const cb=el.querySelector('input');
+      cb.addEventListener('click',e=>{ e.stopPropagation(); routeObjs[id].visible=cb.checked; if(!cb.checked&&state.sel===id) closeSheet(); applyVisibility(); });
+      el.addEventListener('click',()=>{ selectRoute(id,true); if(isMobile()) setDrawer(false); });
+      h.appendChild(el); }
+    box.appendChild(h);
+  }
+}
+function refreshList(){
+  const q=$('search').value.trim().toUpperCase();
+  let nv=0;
+  document.querySelectorAll('.ritem').forEach(el=>{ const o=routeObjs[el.dataset.id], r=o.r;
+    el.querySelector('input').checked=o.visible; el.classList.toggle('hid',!o.visible); if(o.visible) nv++;
+    el.style.display=!q||r.id.includes(q)||r.id.replace(/^U/,'').includes(q)||r.points.some(p=>p.includes(q)||PTS[p].name.toUpperCase().includes(q))?'':'none'; });
+  document.querySelectorAll('.famchip').forEach(c=>c.classList.toggle('off',!famIdx[c.dataset.f].some(id=>routeObjs[id].visible)));
+  $('visCount').textContent=`${nv} de ${ROUTES.length} rutas visibles`;
+  const pm=$('pMatches'); pm.innerHTML='';
+  if (q.length>=2) Object.values(PTS).filter(p=>p.id.includes(q)||p.name.toUpperCase().includes(q)).slice(0,14).forEach(p=>{
+    const c=document.createElement('span'); c.className='chip'; c.textContent=(p.kind==='NAV'?'⬡ ':'△ ')+(p.kind==='NAV'?p.name+' '+p.id:p.id); c.onclick=()=>{ selectPoint(p.id,true); if(isMobile()) setDrawer(false); }; pm.appendChild(c); });
+}
+
+// Ficha inferior
+let sheetH=null;
+function defaultSheetH(){ return Math.round(innerHeight*(isMobile()?.46:.4)); }
+function setSheetH(h, snap){
+  const H=innerHeight, min=96, max=Math.round(H*.86);
+  if (snap){ const snaps=[min, defaultSheetH(), max]; h=snaps.reduce((a,b)=>Math.abs(b-h)<Math.abs(a-h)?b:a); }
+  sheetH=Math.max(min,Math.min(max,h)); document.documentElement.style.setProperty('--sheet-h', sheetH+'px');
+}
+function openSheet(){ if (sheetH==null) setSheetH(defaultSheetH()); $('sheet').classList.add('open'); updateInsets(); }
+function closeSheet(){ state.sel=null; state.selPoint=null; state.selAdj=null; state.hlLeg=null; $('sheet').classList.remove('open'); updateInsets(); applyHighlight(); }
+function sheetTabs(tabs, active){
+  const nav=$('sTabs'); nav.innerHTML=''; nav.style.display=tabs.length>1?'':'none';
+  tabs.forEach(t=>{ const b=document.createElement('button'); b.innerHTML=t.label; b.classList.toggle('on',t.id===active);
+    b.onclick=()=>{ nav.querySelectorAll('button').forEach(x=>x.classList.remove('on')); b.classList.add('on'); $('sBody').innerHTML=t.html(); t.bind?.(); $('sBody').scrollTop=0; }; nav.appendChild(b); });
+  const t=tabs.find(t=>t.id===active)||tabs[0]; $('sBody').innerHTML=t.html(); t.bind?.();
+}
+function legSense(r,i){ const l=r.legs[i], a=r.points[i], b=r.points[i+1];
+  if (l.fwd&&l.rev) return `↔ ida ${parity(l.fwd)} · vuelta ${parity(l.rev)}`;
+  if (l.fwd) return `→ ${a}→${b} ${parity(l.fwd)} <span class="pend">(sentido pendiente)</span>`;
+  return '<span class="pend">pendiente</span>'; }
+function showRoute(r){
+  const o=routeObjs[r.id], hex='#'+o.color.getHexString();
+  $('sColor').style.background=hex; $('sTitle').innerHTML=`<span style="color:${hex}">${r.id}</span>`;
+  $('sSub').textContent=`${FAMILIES[r.family].name} · ${r.kind} · ${r.points[0]} → ${r.points.at(-1)} · ${f1(r.total)} NM · ${r.points.length} puntos`;
+  $('sChips').innerHTML=[`<span class="kchip"><b>FL</b>${r.lower}–${r.upper}</span>`,`<span class="kchip"><b>Clase</b>${r.cls}</span>`,`<span class="kchip"><b>MEA</b>${r.mea}</span>`,
+    `<span class="kchip"><b>ACC</b>${esc(r.freqs[0])}</span>`, r.warnCount?`<span class="kchip w">⚠ ${r.warnCount} por verificar</span>`:''].join('');
+  const warns=[]; if(r.status) warns.push(r.status); if(r.dirNote) warns.push(r.dirNote);
+  r.legs.forEach((l,i)=>{ if(l.note) warns.push(`${r.points[i]}–${r.points[i+1]}: ${l.note}`); });
+  r.points.forEach(p=>PTS[p].notes.forEach(n=>warns.push(`${p}: ${n}`)));
+  const table=()=>{
+    let rows='';
+    r.points.forEach((pid,i)=>{ const p=PTS[pid], comp=r.compulsory.includes(pid), l=r.legs[i];
+      const name = p.kind==='NAV' ? `${p.name} <span class="sub">${p.navType} ${pid}</span>` : pid;
+      rows+=`<tr data-i="${i}" data-p="${pid}"><td>${i+1}</td><td class="pt">${comp?'▲':'△'} ${name}${p.firBdry?' <span class="sub">FIR BDRY</span>':''}</td><td>${p.coord}</td>
+        <td>${comp?'<b>Obligatoria</b>':'A petición'}</td>
+        <td>${l?`${l.fwd||'<span class="pend">n/p</span>'} / ${l.rev||'<span class="pend">n/p</span>'}`:'—'}</td>
+        <td>${l?`${deg3(l.trueCrs)} / ${deg3(l.trueRev)}`:'—'}</td>
+        <td>${l?`<b>${f1(l.dist)}</b> <span class="${Math.abs(l.calc-l.dist)<=1?'ok':'wr'}">(${f1(l.calc)})</span>`:'—'}</td>
+        <td>${i===0?'0.0':f1(r.legs[i-1].accPub)}</td><td>${r.lower}–${r.upper}</td>
+        <td>${l?legSense(r,i):'—'}</td>
+        <td class="obs">${[p.kind==='NAV'?`${p.freq} · CH ${p.ch}`:'', l?.note?`<span class="pend">${esc(l.note)}</span>`:''].filter(Boolean).join(' · ')}</td></tr>`; });
+    return `<div class="tw"><table class="t"><thead><tr><th>#</th><th>Punto</th><th>Coordenadas</th><th>Notificación</th><th>Rumbo MAG al sig. (ida/vuelta)</th><th>Rumbo verd. calc.</th><th>Tramo NM AIP (WGS-84)</th><th>Acum. NM</th><th>FL mín–máx</th><th>Sentido · niveles</th><th>Observaciones</th></tr></thead><tbody>${rows}</tbody></table></div>
+      <p class="foot">Cada fila muestra el punto y el tramo hacia el punto siguiente. Rumbos MAG y distancias: publicados en el AIP; entre paréntesis, distancia geodésica WGS-84 recalculada (verde = coincide ±1 NM). Paridad de niveles derivada de la regla semicircular (000–179° impares · 180–359° pares). n/p = no publicado. Toque una fila para ir al punto.</p>`; };
+  const bindTable=()=>{ $('sBody').querySelectorAll('tbody tr').forEach(tr=>{
+    tr.onmouseenter=()=>showLegHL(+tr.dataset.i); tr.onmouseleave=()=>showLegHL(null);
+    tr.onclick=()=>{ $('sBody').querySelectorAll('tr.hl').forEach(x=>x.classList.remove('hl')); tr.classList.add('hl'); showLegHL(+tr.dataset.i); focusPoint(tr.dataset.p); }; }); };
+  const info=()=>`<dl class="kv">
+      <dt>Designador</dt><dd>${r.id} · ${FAMILIES[r.family].name} · ${r.kind}</dd>
+      <dt>Fuente</dt><dd>AIP Panamá ${esc(r.src)}</dd>
+      <dt>Límites</dt><dd>${r.upper} / ${r.lower} · MEA ${r.mea}</dd>
+      <dt>Espacio aéreo</dt><dd>Clase ${r.cls}</dd>
+      <dt>Dependencia</dt><dd>${r.unit}<br>${r.freqs.map(esc).join('<br>')}</dd>
+      ${r.nav?`<dt>Navegación</dt><dd>${r.nav}</dd>`:''}
+      <dt>SATVOICE</dt><dd>No implementado</dd>
+      <dt>Notificación obligatoria</dt><dd>${r.compulsory.join(', ')||'—'}</dd>
+      ${r.remarks.length?`<dt>Observaciones</dt><dd>${r.remarks.map(esc).join('<br>')}</dd>`:''}
+      <dt>Sentido</dt><dd>${esc(r.dirNote||'Bidireccional (rumbos publicados en ambos sentidos)')}</dd>
+      <dt>FIR adyacentes</dt><dd>${routeAdj(r).map(x=>`${x.p} ↔ ${x.a.name} (${x.a.id})`).join('<br>')||'Ninguna (ruta interna)'}</dd>
+    </dl>`;
+  const avisos=()=>warns.length?warns.map(w=>`<div class="note">${esc(w)}</div>`).join(''):'<p class="foot">Sin datos pendientes para esta ruta.</p>';
+  sheetTabs([{id:'pts',label:'Puntos y tramos',html:table,bind:bindTable},{id:'info',label:'Información',html:info},{id:'av',label:`Avisos${warns.length?` (${warns.length})`:''}`,html:avisos}],'pts');
+  openSheet();
+}
+function showPoint(p){
+  const isNav=p.kind==='NAV', compR=ROUTES.filter(r=>r.compulsory.includes(p.id)).map(r=>r.id);
+  $('sColor').style.background=isNav?THEMES[theme].navCol:THEMES[theme].fixCol;
+  $('sTitle').textContent=isNav?`${p.name} ${p.id}`:p.id;
+  $('sSub').textContent=isNav?`${p.navType} · ${p.freq} · CH ${p.ch} · ${p.country}`:`Punto significativo${p.firBdry?' · límite FIR':''} · ${p.routes.length} ruta(s)`;
+  $('sChips').innerHTML=`<span class="kchip"><b>Coord</b>${p.coord}</span>${compR.length?`<span class="kchip"><b>Notif.</b>obligatoria</span>`:''}${p.notes.length?`<span class="kchip w">⚠ ${p.notes.length} por verificar</span>`:''}`;
+  const html=()=>`<dl class="kv">
+      ${isNav?`<dt>Identificador</dt><dd>${p.id}</dd><dt>Tipo</dt><dd>${p.navType}</dd><dt>Frecuencia</dt><dd>${p.freq}</dd><dt>Canal DME</dt><dd>${p.ch}</dd><dt>Variación</dt><dd>${esc(p.var)}</dd><dt>Elev. antena DME</dt><dd>${p.elev}</dd>`:`<dt>Designador</dt><dd>${p.id} (código de 5 letras)</dd>`}
+      <dt>Coordenadas AIP</dt><dd>${p.coord}</dd><dt>Decimal WGS-84</dt><dd>${p.lat.toFixed(5)}, ${p.lon.toFixed(5)}</dd>
+      <dt>Notificación</dt><dd>${compR.length?'Obligatoria en '+compR.join(', ')+(compR.length<p.routes.length?' · a petición en las demás':''):'A petición'}</dd>
+      ${adjOfPoint[p.id]?`<dt>Límite FIR</dt><dd>Panamá ↔ ${ADJ.find(x=>x.id===adjOfPoint[p.id]).name} (${adjOfPoint[p.id]})</dd>`:''}
+      <dt>Fuente</dt><dd>${esc(p.src)}</dd></dl>
+      ${p.notes.map(n=>`<div class="note">${esc(n)}</div>`).join('')}
+      <div class="h3">Rutas superiores que pasan por ${p.id} (${p.routes.length})</div>
+      <div class="pchips">${p.routes.map(rid=>`<span class="chip" data-r="${rid}" style="border-color:#${routeObjs[rid].color.getHexString()}">${rid}</span>`).join('')||'<span class="foot">Ninguna ruta superior (radioayuda de referencia).</span>'}</div>`;
+  sheetTabs([{id:'p',label:'Ficha',html,bind:()=>$('sBody').querySelectorAll('.chip').forEach(c=>c.onclick=()=>selectRoute(c.dataset.r,true))}],'p');
+  openSheet();
+}
+function showAdj(a){
+  const cops=a.border.filter(p=>typeof p==='string'), rts=ROUTES.filter(r=>routeAdj(r).some(x=>x.a.id===a.id));
+  $('sColor').style.background=a.color; $('sTitle').innerHTML=`<span style="color:${a.color}">${esc(a.name)}</span>`;
+  $('sSub').textContent=`${a.id} · ${a.country} · FIR adyacente a FIR Panamá (MPZL)`;
+  $('sChips').innerHTML=`<span class="kchip"><b>ICAO</b>${a.id}</span><span class="kchip"><b>Puntos límite</b>${cops.length}</span><span class="kchip"><b>Rutas</b>${rts.length}</span>${a.notes.length?`<span class="kchip w">⚠ ${a.notes.length} por verificar</span>`:''}`;
+  const html=()=>`<dl class="kv">
+      <dt>Dependencia</dt><dd>${esc(a.unit)}</dd><dt>Frecuencias</dt><dd>${a.freqs.map(esc).join('<br>')}</dd>
+      <dt>Límite común</dt><dd>${a.border.map(p=>typeof p==='string'?p:esc(p.name.split(' (')[0])).join(' – ')}</dd>
+      <dt>Fuente</dt><dd>${esc(a.src)}</dd></dl>
+      ${a.notes.map(n=>`<div class="note">${esc(n)}</div>`).join('')}
+      <div class="h3">Puntos de transferencia (FIR BDRY) con ${esc(a.name)}</div>
+      <div class="pchips">${cops.map(p=>`<span class="chip" data-p="${p}">${p}</span>`).join('')}</div>
+      <div class="h3">Rutas superiores que entran/salen por este límite (${rts.length})</div>
+      <div class="pchips">${rts.map(r=>`<span class="chip" data-r="${r.id}" style="border-color:#${routeObjs[r.id].color.getHexString()}">${r.id}</span>`).join('')||'<span class="foot">Ninguna</span>'}</div>`;
+  sheetTabs([{id:'a',label:'Ficha',html,bind:()=>{ $('sBody').querySelectorAll('[data-r]').forEach(c=>c.onclick=()=>selectRoute(c.dataset.r,true)); $('sBody').querySelectorAll('[data-p]').forEach(c=>c.onclick=()=>selectPoint(c.dataset.p,true)); }}],'a');
+  openSheet();
+}
+function selectAdj(id){
+  const a=ADJ.find(x=>x.id===id); state.sel=null; state.selPoint=null; applyHighlight(); state.selAdj=id; applyAdjHighlight(); showAdj(a);
+  if (!$('cAdj').checked){ $('cAdj').checked=true; $('cAdj').onchange(); }
+  updateInsets(); const c=project(a.label.lat,a.label.lon,0); requestAnimationFrame(()=>flyTo(c, fitDistance(330), obliqueDir(50)));
+}
+function selectRoute(id, focus){
+  const o=routeObjs[id]; if (!o.visible){ o.visible=true; applyVisibility(); }
+  state.sel=id; state.selPoint=null; applyHighlight(); showRoute(o.r);
+  if (focus) requestAnimationFrame(()=>focusRoute(id));
+}
+function selectPoint(id, focus, keepRoute){
+  state.selPoint=id; if (!keepRoute) state.sel=null; applyHighlight();
+  if (keepRoute && state.sel){ /* conserva la ficha de la ruta */ } else showPoint(PTS[id]);
+  if (focus) requestAnimationFrame(()=>focusPoint(id));
+}
+
+// Arrastre de la ficha (cambiar altura)
+(function sheetDrag(){
+  let y0=null, h0=0, moved=false;
+  const start=e=>{ if (e.target.closest('button')) return; y0=e.clientY; h0=sheetH; moved=false; $('sheet').classList.add('dragging'); e.currentTarget.setPointerCapture?.(e.pointerId); };
+  const move=e=>{ if (y0==null) return; const dy=y0-e.clientY; if (Math.abs(dy)>3) moved=true; setSheetH(h0+dy); updateInsets(); };
+  const end=e=>{ if (y0==null) return; $('sheet').classList.remove('dragging'); if (moved){ if (sheetH<80) closeSheet(); else setSheetH(sheetH,true); } y0=null; updateInsets(); };
+  for (const el of [$('grab'), $('sHead')]){ el.addEventListener('pointerdown',start); el.addEventListener('pointermove',move); el.addEventListener('pointerup',end); el.addEventListener('pointercancel',end); }
+})();
+
+// Leyenda
+function buildLegend(){
+  const L=$('legend'); L.innerHTML='<div class="h3">Familias de rutas</div>';
+  for (const fam in FAMILIES){ if(!famIdx[fam]) continue; L.insertAdjacentHTML('beforeend',`<div><i style="width:26px;height:4px;border-radius:2px;background:${famCss(fam)}"></i>${FAMILIES[fam].name} (${fam}) · ${FAMILIES[fam].kind}</div>`); }
+  L.insertAdjacentHTML('beforeend','<div class="h3">Símbolos (Anexo 4 OACI)</div>');
+  const T=THEMES[theme], sym=(t,f,lab,col)=>{ const d=document.createElement('div'), cv=document.createElement('canvas'); cv.width=cv.height=44; cv.style.width=cv.style.height='22px'; drawSymbol(cv.getContext('2d'),t,44,col,f); d.append(cv,lab); L.appendChild(d); };
+  sym('WPT',true,'Punto de notificación obligatoria (ATS/MET)',T.fixCol); sym('WPT',false,'Punto de notificación a petición',T.fixCol);
+  sym('VOR',false,'VOR',T.navCol); sym('VORDME',false,'VOR/DME y DVOR/DME',T.navCol); sym('DME',false,'DME (no hay en rutas superiores)',T.navCol);
+  L.insertAdjacentHTML('beforeend',`<div><i style="width:26px;border-top:2px dashed ${'#'+new THREE.Color(T.fir).getHexString()}"></i>Contorno FIR Panamá</div>`);
+  L.insertAdjacentHTML('beforeend',`<div><i style="width:26px;border-top:1.5px solid ${'#'+new THREE.Color(T.border).getHexString()};opacity:.7"></i>Fronteras internacionales</div>`);
+  L.insertAdjacentHTML('beforeend','<div class="h3">FIR adyacentes</div>');
+  for (const a of ADJ) L.insertAdjacentHTML('beforeend',`<div style="cursor:pointer" data-adj="${a.id}"><i style="width:26px;height:10px;border-radius:3px;background:${a.color}33;border:2px solid ${a.color}"></i>${a.name} · ${a.id}</div>`);
+  L.querySelectorAll('[data-adj]').forEach(d=>d.onclick=()=>{ selectAdj(d.dataset.adj); if(isMobile()) setDrawer(false); });
+  L.insertAdjacentHTML('beforeend',`<div class="h3">Relieve (altitud)</div><div><span class="ramp" style="background:linear-gradient(90deg,${RAMP.map(([h,c])=>'#'+c.getHexString()+' '+(h/3300*100).toFixed(0)+'%').join(',')})"></span></div><div style="justify-content:space-between;font:10.5px var(--mono)"><span>0 m</span><span>1 000</span><span>2 000</span><span>3 300+ m</span></div>`);
+  L.insertAdjacentHTML('beforeend','<p class="hint">Con una ruta seleccionada, las etiquetas de color muestran distancia (NM) y rumbo MAG de cada tramo. ▲ en la tabla = notificación obligatoria.</p>');
+}
+// Acerca de
+function buildAbout(){
+  const M=DATA.meta; let legs=0, ok=0, rows='';
+  for (const r of ROUTES) r.legs.forEach((l,i)=>{ legs++; const d=l.calc-l.dist; if(Math.abs(d)<=1) ok++;
+    rows+=`<tr><td>${r.id}</td><td>${r.points[i]}–${r.points[i+1]}</td><td>${f1(l.dist)}</td><td>${f1(l.calc)}</td><td class="${Math.abs(d)<=1?'ok':'wr'}">${d>=0?'+':''}${d.toFixed(2)}</td><td>${l.fwd||'<span class="pend">n/p</span>'}${l.rev?' / '+l.rev:''}</td><td>${deg3(l.trueCrs)}</td><td>${r.src.split(' (')[0]}</td></tr>`; });
+  const nNav=Object.values(PTS).filter(p=>p.kind==='NAV').length;
+  $('aboutBody').innerHTML=`
+    <div class="note">Material didáctico. <b>No apto para navegación ni planificación operacional.</b> Verifique siempre el AIP, AIP SUP y NOTAM vigentes.</div>
+    <p>Visor de las <b>${ROUTES.length} rutas ATS superiores</b> (${legs} tramos), <b>${Object.keys(PTS).length-nNav} puntos significativos</b> y <b>${nNav} radioayudas VOR/DME</b> del FIR Panamá. Fuente: AIP Panamá, AIS — Autoridad Aeronáutica Civil (aeronautica.gob.pa).</p>
+    <div class="note info">${esc(M.airac)}</div>
+    <h4>Fuentes AIP</h4><table class="t"><tbody>${M.fuentes.map(f=>`<tr><td>${esc(f[0])}</td><td>${esc(f[1])}</td></tr>`).join('')}</tbody></table>
+    <h4>Relieve y cartografía de referencia</h4><p>Relieve: teselas públicas <i>Terrarium</i> (AWS Open Data · Tilezen; fuentes SRTM, GMTED, ETOPO1 y otras), zoom 7 (~1,2 km). Fronteras: Natural Earth 1:50 m. Solo referencia visual, no aeronáutica. Estado del relieve: <b>${DEM?'cargado':'no disponible — se muestra mapa plano'}</b>.</p>
+    <h4>Proyección y escala</h4><p>Azimutal equidistante centrada en ${C0.lat}°N ${-C0.lon}°W, en millas náuticas (distorsión &lt; 0,3 % dentro del FIR). Distancias de tablas: las publicadas por el AIP y, entre paréntesis, la geodésica WGS-84 recalculada (Vincenty). Coincidencia: <b class="ok">${ok}/${legs} tramos dentro de ±1 NM</b>.</p>
+    <h4>Datos pendientes de verificar</h4><ol>${M.pendientes.map(p=>`<li>${esc(p)}</li>`).join('')}</ol>
+    <p class="foot">${esc(M.fueraAlcance)}</p>
+    <h4>Tabla de verificación por tramo</h4>
+    <div class="tw"><table class="t"><thead><tr><th>Ruta</th><th>Tramo</th><th>NM AIP</th><th>NM WGS-84</th><th>Δ</th><th>MAG AIP</th><th>Verd. calc.</th><th>Fuente</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+}
+
+// Selección con ratón / táctil
+const ray=new THREE.Raycaster(); ray.params.Line2={threshold:10}; ray.camera=camera;
+const ndc=new THREE.Vector2(); let down=null;
+function pick(ev){
+  const rc=canvas.getBoundingClientRect(); ndc.set((ev.clientX-rc.left)/rc.width*2-1, -(ev.clientY-rc.top)/rc.height*2+1);
+  ray.setFromCamera(ndc,camera);
+  const vis=o=>{ for(let p=o; p; p=p.parent) if(!p.visible) return false; return !(o.isSprite && o.userData.isLabel && o.material.opacity<.3); };
+  const objs=pickables.concat(Object.values(fixObjs).flatMap(f=>[f.sym,f.lbl])).filter(vis);
+  const hits=ray.intersectObjects(objs,false); if (!hits.length) return null;
+  const sym=hits.filter(h=>h.object.userData.pointId&&!h.object.userData.isLabel);
+  if (sym.length){ const sd=h=>{ const q=h.object.getWorldPosition(new THREE.Vector3()).project(camera); return Math.hypot(q.x-ndc.x,(q.y-ndc.y)/camera.aspect); }; return sym.sort((a,b)=>sd(a)-sd(b))[0].object.userData; }
+  return (hits.find(h=>h.object.userData.pointId)||hits[0]).object.userData;
+}
+canvas.addEventListener('pointerdown',e=>{ down={x:e.clientX,y:e.clientY}; fly=null; });
+canvas.addEventListener('pointerup',e=>{
+  if (!down||Math.hypot(e.clientX-down.x,e.clientY-down.y)>6){ down=null; return; } down=null;
+  const u=pick(e); if (!u){ if (state.sel||state.selPoint) closeSheet(); return; }
+  if (u.adjId){ selectAdj(u.adjId); return; }
+  if (u.pointId) selectPoint(u.pointId, false, !!(u.routeId&&u.routeId===state.sel));
+  else if (u.routeId) selectRoute(u.routeId, true);
+});
+let hoverEv=null;
+canvas.addEventListener('pointermove',e=>{ if(e.pointerType!=='mouse'||e.buttons){ $('tip').style.display='none'; return; } hoverEv=e; });
+canvas.addEventListener('pointerleave',()=>$('tip').style.display='none');
+function doHover(){ if(!hoverEv) return; const e=hoverEv; hoverEv=null; const u=pick(e), tip=$('tip');
+  if (!u){ tip.style.display='none'; canvas.style.cursor=''; return; } canvas.style.cursor='pointer';
+  if (u.adjId){ const a=ADJ.find(x=>x.id===u.adjId); tip.textContent=`${a.name} · ${a.id} · ${a.country}`; }
+  else if (u.pointId){ const p=PTS[u.pointId]; tip.textContent=p.kind==='NAV'?`${p.name} ${p.id} · ${p.navType} ${p.freq}`:`${p.id} · ${p.routes.join(' ')}`; }
+  else { const r=routeObjs[u.routeId].r; tip.textContent=`${r.id} · ${r.points[0]} → ${r.points.at(-1)} · ${f1(r.total)} NM`; }
+  tip.style.display='block'; tip.style.left=Math.min(e.clientX+14, innerWidth-tip.offsetWidth-8)+'px'; tip.style.top=(e.clientY+14)+'px'; }
+
+// Escala gráfica y brújula
+const NICE=[5,10,20,25,50,100,150,200,250,500,1000];
+function updateScale(){
+  const right=new THREE.Vector3().setFromMatrixColumn(camera.matrixWorld,0).setY(0).normalize();
+  const a=controls.target.clone().project(camera), b=controls.target.clone().add(right.multiplyScalar(100)).project(camera);
+  const px=Math.abs(b.x-a.x)*innerWidth/2; if (!isFinite(px)||px<=0) return;
+  const want=120/px*100, nm=NICE.reduce((p,c)=>Math.abs(c-want)<Math.abs(p-want)?c:p);
+  $('scaleBar').style.width=(nm*px/100)+'px'; $('scaleLbl').textContent=`${nm} NM · ${Math.round(nm*1.852)} km`;
+  $('needle').style.transform=`rotate(${controls.getAzimuthalAngle()}rad)`;
+}
+function toast(msg, spin=true, ms=0){ const t=$('toast'); $('toastMsg').textContent=msg; t.querySelector('.spin').style.display=spin?'':'none'; t.style.display=msg?'flex':'none'; clearTimeout(t._h); if(ms) t._h=setTimeout(()=>t.style.display='none',ms); }
+
+/* ═════════════════════════════ 9. TEMA, AJUSTES Y BUCLE ═════════════════════════════ */
+function resizeLineMat(m){ m.resolution.set(innerWidth*renderer.getPixelRatio(), innerHeight*renderer.getPixelRatio()); }
+function applyTheme(t){
+  theme=t; document.documentElement.dataset.theme=t; try{ localStorage.setItem('firpa-theme',t); }catch(e){}
+  const T=THEMES[t]; scene.background=new THREE.Color(T.bg); scene.fog.color.set(T.bg);
+  oceanUni.cShallow.value.set(T.shallow); oceanUni.cDeep.value.set(T.deep); oceanUni.cGlow.value.set(T.glow); oceanUni.glowK.value=T.glowK;
+  outerOcean.material.color.set(T.deep); borderMat.color.set(T.border); gridMat.color.set(T.grid); firMat.color.set(T.fir);
+  hemi.color.set(T.hemi[0]); hemi.groundColor.set(T.hemi[1]);
+  document.querySelector('meta[name=theme-color]').content='#'+new THREE.Color(T.bg).getHexString();
+  if (!DEM) buildFallbackLand();
+  symCache.clear(); buildFixes();
+  gridLabels.forEach(s=>redrawText(s,T.gridLbl)); buildAdjacent(); redrawText(firLabel,'#'+new THREE.Color(T.fir).getHexString());
+  for (const id in routeObjs){ const o=routeObjs[id]; o.color.copy(routeColor(o.r)); o.mat.color.copy(o.color); o.dm.color.copy(o.color);
+    o.curtain.material.color.copy(o.color); o.nodes.forEach(n=>n.material.color.copy(o.color)); redrawText(o.lbl,'#'+o.color.getHexString());
+    o.layerLine.material.color.copy(o.color); o.layerFill.material.color.copy(o.color); redrawText(o.layerLbl,'#'+o.color.getHexString()); }
+  buildList(); applyVisibility(); applyHighlight(); buildLegend();
+  if (state.sel) showRoute(routeObjs[state.sel].r); else if (state.selPoint) showPoint(PTS[state.selPoint]);
+}
+function setQuality(q){
+  state.quality=q; try{ localStorage.setItem('firpa-quality',q); }catch(e){}
+  document.querySelectorAll('#qualSeg button').forEach(b=>b.classList.toggle('on',b.dataset.q===q));
+  renderer.setPixelRatio(Math.min(devicePixelRatio, QUALITY[q].pr)); resize();
+  if (DEM){ toast('Generando relieve…'); setTimeout(()=>{ buildTerrain(); toast('',false); },30); }
+}
+function resize(){
+  const w=innerWidth, h=innerHeight; renderer.setSize(w,h,false); camera.aspect=w/h; camera.updateProjectionMatrix();
+  for (const id in routeObjs) resizeLineMat(routeObjs[id].mat); for (const id in adjObjs){ resizeLineMat(adjObjs[id].lm); resizeLineMat(adjObjs[id].gm); }
+  if (selFx.group) selFx.group.traverse(o=>{ if(o.material?.isLineMaterial) resizeLineMat(o.material); });
+  sprites.forEach(sizeSprite); if (sheetH!=null) setSheetH(Math.min(sheetH, innerHeight*.86)); updateInsets();
+}
+function bindUI(){
+  $('bMenu').onclick=()=>setDrawer($('drawer').classList.contains('closed'));
+  $('backdrop').onclick=()=>setDrawer(false);
+  document.querySelectorAll('#dTabs button').forEach(b=>b.onclick=()=>{ document.querySelectorAll('#dTabs button').forEach(x=>x.classList.toggle('on',x===b)); document.querySelectorAll('#drawer .pane').forEach(p=>p.classList.toggle('on',p.id===b.dataset.t)); });
+  document.querySelectorAll('#modeSeg button').forEach(b=>b.onclick=()=>setMode(b.dataset.m));
+  document.querySelectorAll('#groupSeg button').forEach(b=>b.onclick=()=>{ state.groupBy=b.dataset.g; document.querySelectorAll('#groupSeg button').forEach(x=>x.classList.toggle('on',x===b)); computeTargets(); });
+  document.querySelectorAll('#qualSeg button').forEach(b=>b.onclick=()=>setQuality(b.dataset.q));
+  const sp=$('spacing'), ex=$('exag'), rl=$('relief');
+  sp.oninput=()=>{ state.spacing=+sp.value; $('oSpacing').textContent=sp.value+' NM'; computeTargets(); };
+  ex.oninput=()=>{ state.exag=+ex.value; $('oExag').textContent='×'+ex.value; computeTargets(); if(state.mode==='fl') buildRuler(); };
+  rl.oninput=()=>{ state.relief=+rl.value; $('oRelief').textContent='×'+rl.value; computeTargets(); };
+  sp.oninput(); ex.oninput(); rl.oninput();
+  for (const id of ['cLblPts','cLblRts','cNavOther']) $(id).onchange=applyVisibility;
+  $('cRelief').onchange=computeTargets;
+  $('cBorders').onchange=e=>{ if(bordersObj) bordersObj.visible=e.target.checked; };
+  $('cFirLayers').onchange=computeTargets;
+  $('cAdj').onchange=()=>{ const v=$('cAdj').checked; adjGroup.visible=adjDrape.visible=v; };
+  $('cFir').onchange=e=>{ if(firObj) firObj.visible=e.target.checked; firLabel.visible=e.target.checked; };
+  $('cGrid').onchange=e=>refGroup.grid.visible=e.target.checked;
+  $('cLegLbl').onchange=()=>{ if(state.sel) buildSelFx(state.sel); };
+  $('bAll').onclick=()=>{ for(const id in routeObjs) routeObjs[id].visible=true; applyVisibility(); };
+  $('bNone').onclick=()=>{ for(const id in routeObjs) routeObjs[id].visible=false; closeSheet(); applyVisibility(); };
+  $('search').oninput=refreshList;
+  $('search').onkeydown=e=>{ if(e.key!=='Enter') return; const q=e.target.value.trim().toUpperCase();
+    const r=ROUTES.find(r=>r.id===q||r.id==='U'+q); if(r){ selectRoute(r.id,true); if(isMobile()) setDrawer(false); return; }
+    const p=PTS[q]||Object.values(PTS).find(p=>p.name.toUpperCase()===q); if(p){ selectPoint(p.id,true); if(isMobile()) setDrawer(false); } };
+  $('bClose').onclick=closeSheet;
+  $('bExpand').onclick=()=>{ setSheetH(sheetH>=innerHeight*.6?defaultSheetH():innerHeight*.86); updateInsets(); };
+  $('bFocus').onclick=()=>{ if(state.sel) focusRoute(state.sel); else if(state.selPoint) focusPoint(state.selPoint); };
+  for (const s of ['','2']){ $('vTop'+s).onclick=viewTop; $('vSide'+s).onclick=viewSide; $('vReset'+s).onclick=viewReset; }
+  $('compass').onclick=viewNorth;
+  $('bTheme').onclick=()=>applyTheme(theme==='dark'?'light':'dark');
+  $('bAbout').onclick=()=>{ buildAbout(); $('about').showModal(); }; $('bAboutClose').onclick=()=>$('about').close();
+  addEventListener('keydown',e=>{ if(e.key==='Escape'&&!$('about').open) closeSheet(); });
+  addEventListener('resize',resize);
+}
+
+const clock=new THREE.Clock(); let frame=0;
+function animate(){
+  requestAnimationFrame(animate);
+  const dt=Math.min(clock.getDelta(),.05), k=1-Math.exp(-dt*6), kl=1-Math.exp(-dt*10);
+  // desplazamiento del centro óptico hacia la zona libre
+  if (Math.abs(view.tcx-view.cx)>.3||Math.abs(view.tcy-view.cy)>.3){ view.cx+=(view.tcx-view.cx)*k; view.cy+=(view.tcy-view.cy)*k; applyViewOffset(); }
+  // relieve
+  const tr=tgtRelief(); curRelief+=(tr-curRelief)*k; terrainGroup.scale.y=Math.max(curRelief,.001);
+  const ron=reliefOn(); if (landMesh) landMesh.visible=ron; refGroup.fallback.visible=!ron; terrainGroup.position.y=ron?0:.06;
+  // sin relieve, fronteras y FIR se dibujan como superposición (no pelean con el mar plano); con relieve, las montañas las ocultan
+  if (borderMat.depthTest!==ron){ borderMat.depthTest=firMat.depthTest=gridMat.depthTest=ron; borderMat.needsUpdate=firMat.needsUpdate=gridMat.needsUpdate=true;
+    if (bordersObj) bordersObj.renderOrder=ron?3:3; refGroup.grid.children[0].renderOrder=ron?1:1.5; }
+  // rutas
+  const drops=$('cDrops').checked, curtainH=Math.max(ftToNM((FL_CAP-195)*100)*state.exag,1e-3);
+  for (const id in routeObjs){ const o=routeObjs[id];
+    o.curH+=(o.tgtH-o.curH)*k; if (Math.abs(o.tgtH-o.curH)<1e-3) o.curH=o.tgtH; o.g.position.y=o.curH;
+    o.dropG.scale.y=Math.max(o.curH,1e-3); o.dropG.visible=drops&&state.mode!=='plane';
+    const wa=state.mode==='fl'?(o.curtain.userData.dim?.012:.07):0; o.curtainA+=(wa-o.curtainA)*k; o.curtain.material.opacity=o.curtainA; o.curtain.visible=o.curtainA>.003; o.curtain.scale.y=curtainH; }
+  // puntos: sobre el relieve (capas/FL) o en el plano único
+  const ph=state.mode==='plane'?planeH():null;
+  for (const id in fixObjs){ const f=fixObjs[id], y=ph!=null?ph:f.hM/NM*curRelief+.2; f.sym.position.y+=(y-f.sym.position.y)*k; f.lbl.position.y=f.sym.position.y; }
+  firLabel.position.y=.1;
+  { let top=6; for (const id in routeObjs){ const o=routeObjs[id]; if (o.visible) top=Math.max(top,o.curH); }
+    for (const id in adjObjs) adjObjs[id].wall.scale.y=top+8; }
+  // etiquetas con fundido según prioridad/solape
+  if ((frame&3)===0) declutter();
+  for (const s of labelReg){ const t=s._base*s._dec; s.material.opacity+=(t-s.material.opacity)*kl; }
+  if (fly){ fly.s ??= performance.now(); fly.t=Math.min(1,(performance.now()-fly.s)/1000);   // por tiempo real: fluido aunque baje la tasa de cuadros
+    const e=fly.t<.5?4*fly.t**3:1-(-2*fly.t+2)**3/2; camera.position.lerpVectors(fly.p0,fly.p1,e); controls.target.lerpVectors(fly.t0,fly.t1,e); if(fly.t>=1) fly=null; }
+  controls.update(); doHover(); if ((frame++&3)===0) updateScale();
+  // plano cercano dinámico: más precisión de profundidad al alejarse (evita manchas/parpadeo en el mar)
+  const nearT=Math.min(60, Math.max(2, camera.position.distanceTo(controls.target)*.03));
+  if (Math.abs(nearT-camera.near)/camera.near>.15){ camera.near=nearT; camera.updateProjectionMatrix(); applyViewOffset(); }
+  renderer.render(scene,camera);
+}
+
+/* ═════════════════════════════ 10. INICIO ═════════════════════════════ */
+(async function init(){
+  try { await Promise.race([document.fonts.load('700 12px "B612 Mono"'), new Promise(r=>setTimeout(r,2500))]); } catch(e){}
+  clearTimeout(window.__failTimer);
+  document.documentElement.dataset.theme=theme;
+  buildOcean(); buildFallbackLand(); buildDraped(); buildFixes(); buildRoutes(); buildAdjacent(); bindUI();
+  applyTheme(theme); setQuality(state.quality);
+  resize(); const h=homeView(); camera.position.copy(h.pos); controls.target.copy(h.tgt);
+  setMode('layers'); applyVisibility(); applyHighlight();
+  if (isMobile()) setDrawer(false); else updateInsets();
+  view.cx=view.tcx; view.cy=view.tcy; applyViewOffset();
+  $('loading').style.opacity=0; setTimeout(()=>$('loading').remove(),500); animate();
+  // Relieve: descarga en segundo plano
+  toast('Descargando relieve 3D… 0%'); $('reliefState').textContent='Descargando…';
+  DEM = await loadDEM((d,n)=>toast(`Descargando relieve 3D… ${Math.round(d/n*100)}%`));
+  if (DEM){
+    toast('Generando relieve 3D…'); await new Promise(r=>setTimeout(r,30));
+    computeReliefMax(); buildTerrain(); buildOcean(); buildDraped(); buildAdjacent();
+    for (const id in fixObjs){ const p=PTS[id]; fixObjs[id].hM=Math.max(demAt(p.lat,p.lon),0); }
+    curRelief=.001; computeTargets(); $('reliefState').textContent=`Cargado · cumbre máx. Panamá ≈ ${Math.round(reliefMaxM)} m`;
+    toast('Relieve 3D listo', false, 1800);
+  } else {
+    $('reliefState').textContent='No disponible (sin conexión): mapa plano'; $('cRelief').checked=false;
+    toast('No se pudo descargar el relieve: se muestra mapa plano', false, 4500);
+  }
+  window.__visor={focusRoute,insets,fitDistance,scene,getLand:()=>landMesh,routeObjs,fixObjs,PTS,ROUTES,selectRoute,selectPoint,setMode,state,camera,controls,closeSheet,setDrawer,setQuality,applyTheme,view}; // depuración
+})();
+</script>
+</body>
+</html>
