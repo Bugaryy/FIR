@@ -1,0 +1,21 @@
+Copyright (c) 2026 Delta Charlie (https://github.com/Bugaryy)
+Todos los derechos reservados.
+
+Visor 3D FIR Panamá (MPZL) — rutas ATS superiores, inferiores y nacionales.
+
+El diseño, la interfaz, el código, los ejercicios y la recopilación y verificación
+de los datos de este proyecto son obra de Delta Charlie. Queda prohibida su copia,
+modificación, redistribución, publicación o uso comercial, total o parcial, sin
+autorización previa y por escrito del autor. Ver el proyecto en su enlace público
+no concede ningún derecho sobre él.
+
+Componentes de terceros (conservan sus propias licencias):
+- Datos aeronáuticos: AIP Panamá (AIS — Autoridad Aeronáutica Civil de Panamá) y
+  AIP Colombia, información pública. Material didáctico; no apto para navegación.
+- Three.js — licencia MIT, (c) 2010-2024 three.js authors.
+- Natural Earth — dominio público.
+- Relieve: Terrain Tiles (formato Terrarium), AWS Open Data / Tilezen (Mapzen),
+  con sus atribuciones de fuente (SRTM, GMTED, ETOPO1 y otras).
+- Tipografías B612 y B612 Mono — SIL Open Font License 1.1.
+
+Para solicitar permisos: https://github.com/Bugaryy
