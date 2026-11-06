@@ -7,11 +7,9 @@ los datos del AIP Panamá.
 © 2026 Todos los derechos reservados — ver [LICENSE](LICENSE).
 
 ## Qué incluye
-- Rutas superiores, inferiores y nacionales, por separado o todas juntas.
+- Rutas superiores.
 - Modos de vista: plano único, capas por familia y altitud por nivel de vuelo.
 - Puntos significativos, VOR/DME, límites del FIR y FIR adyacentes.
-- Ejercicios: nombrar los puntos y construir la ruta completa.
-- Radar con tráfico simulado.
 - Funciona en computadora y en celular.
 
 ## Fuentes
