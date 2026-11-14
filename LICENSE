@@ -1,21 +1,44 @@
-Copyright (c) 2026 Delta Charlie (https://github.com/Bugaryy)
+FIR Panamá 3D — Visor 3D del espacio aéreo de Panamá (FIR MPZL)
+
+Copyright (c) 2026 Derek Cuan ("Delta Charlie") — https://github.com/Bugaryy
 Todos los derechos reservados.
 
-Visor 3D FIR Panamá (MPZL) — rutas ATS superiores, inferiores y nacionales.
+1. Titularidad
+El diseño, la interfaz (incluidas las interfaces "Grafito" y "Clásica"), el código
+fuente, la representación 3D, los ejercicios, el tutorial, el radar simulado y la
+recopilación, organización y verificación de los datos de este proyecto son obra
+de Derek Cuan, que firma como "Delta Charlie".
 
-El diseño, la interfaz, el código, los ejercicios y la recopilación y verificación
-de los datos de este proyecto son obra de Delta Charlie. Queda prohibida su copia,
-modificación, redistribución, publicación o uso comercial, total o parcial, sin
-autorización previa y por escrito del autor. Ver el proyecto en su enlace público
-no concede ningún derecho sobre él.
+2. Uso permitido
+Se permite abrir y utilizar el visor desde su enlace público o desde el archivo
+descargado, únicamente para estudio personal y sin fines comerciales.
 
-Componentes de terceros (conservan sus propias licencias):
-- Datos aeronáuticos: AIP Panamá (AIS — Autoridad Aeronáutica Civil de Panamá) y
-  AIP Colombia, información pública. Material didáctico; no apto para navegación.
-- Three.js — licencia MIT, (c) 2010-2024 three.js authors.
-- Natural Earth — dominio público.
-- Relieve: Terrain Tiles (formato Terrarium), AWS Open Data / Tilezen (Mapzen),
-  con sus atribuciones de fuente (SRTM, GMTED, ETOPO1 y otras).
-- Tipografías B612 y B612 Mono — SIL Open Font License 1.1.
+3. Uso no permitido sin autorización
+Queda prohibido, total o parcialmente y por cualquier medio, sin autorización
+previa y por escrito del autor:
+  - copiar, modificar, adaptar o crear obras derivadas del código o del diseño;
+  - redistribuir, volver a publicar o alojar el proyecto en otro sitio;
+  - venderlo, sublicenciarlo o usarlo con fines comerciales;
+  - retirar o alterar los avisos de autoría y de derechos de autor.
+Que el código sea visible en el repositorio o en el navegador no concede ningún
+derecho sobre él.
 
+4. Carácter didáctico
+Este proyecto es material didáctico para el aprendizaje. No es una publicación
+oficial y no es apto para la navegación ni para la planificación operacional.
+Se entrega "tal cual", sin garantías de ningún tipo; el autor no se hace
+responsable del uso que se le dé.
+
+5. Componentes de terceros (conservan sus propias licencias)
+  - Datos aeronáuticos: AIP Panamá y AIP Colombia, información pública. Los datos
+    no se presentan como oficiales; deben verificarse siempre en las fuentes
+    vigentes (AIP, AIP SUP y NOTAM).
+  - Three.js — licencia MIT, (c) 2010-2024 three.js authors.
+  - Natural Earth (costas y fronteras) — dominio público.
+  - Relieve: Terrain Tiles (formato Terrarium), AWS Open Data / Tilezen, con sus
+    atribuciones de fuente (SRTM, GMTED, ETOPO1 y otras).
+  - Tipografías B612, B612 Mono, Archivo Narrow y Atkinson Hyperlegible —
+    SIL Open Font License 1.1 (servidas por Google Fonts).
+
+6. Permisos y contacto
 Para solicitar permisos: https://github.com/Bugaryy
