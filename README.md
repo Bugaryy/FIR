@@ -15,6 +15,12 @@ Es un solo archivo, `index.html`. Se puede abrir desde la página de GitHub Page
 
 La primera vez aparece un aviso para ver el **tutorial guiado**. También se abre en cualquier momento con el botón **?**.
 
+
+
+https://github.com/user-attachments/assets/e5231855-1aca-4b61-a31e-ed32440c2861
+
+
+
 ## Funciones
 
 ### Espacio aéreo
